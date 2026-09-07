@@ -90,7 +90,7 @@ outputs/visualization/v1/090b520c-ecfd-4124-85ee-14d3d8ed82d5/
 
 ## Git 버전 관리와 외부 자료
 
-2026-09-07 사용자 요청으로 [GIY0201/KSAS-](https://github.com/GIY0201/KSAS-)를 이 프로젝트의 GitHub 원격 저장소로 사용합니다. 원격 이름은 `origin`, 기본 브랜치는 기존 저장소의 `main`입니다. 기존 초기 커밋과 MIT `LICENSE`를 보존합니다. **공개 저장소이므로 비밀정보나 원본 비행 자료를 커밋하지 않습니다.**
+2026-09-07 사용자 요청으로 [GIY0201/2026-Autumn_KSAS](https://github.com/GIY0201/2026-Autumn_KSAS)를 이 프로젝트의 GitHub 원격 저장소로 사용합니다. 처음 제공된 `GIY0201/KSAS-` 주소는 이 주소로 연결되며, GitHub repository ID `1360108702`가 동일함을 확인했습니다. 원격 이름은 `origin`, 기본 브랜치는 기존 저장소의 `main`입니다. 로컬 작업 폴더는 `2026_KSAS`를 그대로 유지하며, 다른 로컬 프로젝트의 코드를 통합한 것이 아닙니다. 기존 초기 커밋과 MIT `LICENSE`를 보존합니다. **공개 저장소이므로 비밀정보나 원본 비행 자료를 커밋하지 않습니다.**
 
 - 관리 대상: 프로젝트 코드, 버전별 설정과 테스트, `pyproject.toml`, `uv.lock`, 설계 문서·도식, 폴더별 지침, 이 프로젝트에서 작성한 출처 기록.
 - 제외 대상: `.venv/`, cache·log·개인 tooling 설정, `Holybro Pixhawk.zip` 등 원본 압축파일, 외부 CSV·NPY·PDF·notebook·스크립트, `outputs/`의 실행 결과, `temp/`의 임시 파일, credential 파일. `outputs/`와 `temp/`의 안내 문서는 관리합니다.
@@ -102,7 +102,7 @@ outputs/visualization/v1/090b520c-ecfd-4124-85ee-14d3d8ed82d5/
 새 작업 환경에서는 다음처럼 내려받습니다. 기존 프로젝트 폴더 안에 중복 clone하지 않습니다.
 
 ```powershell
-git clone https://github.com/GIY0201/KSAS-.git 2026_KSAS
+git clone https://github.com/GIY0201/2026-Autumn_KSAS.git 2026_KSAS
 cd 2026_KSAS
 uv sync --locked
 ```
