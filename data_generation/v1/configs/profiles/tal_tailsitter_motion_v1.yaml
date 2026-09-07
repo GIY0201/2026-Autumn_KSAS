@@ -1,0 +1,152 @@
+# Evidence-informed reduced-motion simulation. It is not a Tal aircraft-device reproduction.
+engine: bounded_motion
+object_id: vtol
+model_id: tal_tailsitter_motion_v1
+identity_label: "VTOL · Tailsitter 참고 운동모델"
+source_id: tal_tailsitter_2022
+input_id: arxiv:2207.13218v1
+evidence_status: EVIDENCE_INFORMED_KINEMATIC
+metadata:
+  motion_abstraction: bounded_track_kinematics
+  operating_parameter_role: simulation_design
+  source_model_role: maneuver_context_not_fitted_dynamics
+source_files:
+  - path: data_sources/tal_tailsitter_2022/2207.13218v1.pdf
+    sha256: 3d485b0125c90d1ac9c0dd8b2f894c0e1753fbdcae473326eebf5ba466236067
+    url: https://arxiv.org/pdf/2207.13218v1
+source_evidence:
+  - location: "Table IV, PDF p. 13"
+    statement: "Maximum measured speed 8.3 m/s during hover-to-forward transition."
+    use: maneuver_context_not_global_limit_or_calibration
+  - location: "Section VI-E, PDF p. 15"
+    statement: "Reference target 8 m/s, transition 3 s at 2.7 m/s^2 tangential, circular reference 3.5 m."
+    use: maneuver_context_not_global_limit_or_calibration
+  - location: "Tal angular body-rate measurements"
+    statement: "Body angular rate is not a ground-track turn rate."
+    use: excluded_from_track_turn_parameterization
+limitations:
+  - New free-space kinematic scenarios are not an indoor-flight replay.
+  - Vertical, turn, response, and speed settings are simulation design, not fitted or certified limits.
+  - No 6-DOF attitude, controller, actuator, rotor, or raw-log fit is implemented.
+  - No field or whole-envelope validation is claimed.
+motion:
+  dt_s: 0.02
+  horizontal_speed_max_mps: 8.0
+  vertical_speed_max_mps: 2.0
+  horizontal_accel_max_mps2: 3.0
+  vertical_accel_max_mps2: 1.5
+  turn_rate_max_deg_s: 45.0
+  speed_response_s: 1.0
+  vertical_response_s: 0.8
+  turn_response_s: 0.4
+experiment:
+  role: simulation_design_not_airframe_coefficients
+  # Explicit opt-in; profiles without this versioned policy keep the legacy time-window path.
+  execution_policy:
+    id: vtol_phase_aware_v1
+    # Engineering reference smoothing, not a Tal measured transition coefficient.
+    reference_blend_s: 1.0
+    # Engineering state-settling dwell after the sampled minimum phase time.
+    settling_dwell_s: 0.4
+    # Engineering timeout extension; a missed target fails instead of advancing silently.
+    max_extension_s: 8.0
+  initial_position_enu_m: [0.0, 0.0, 0.0]
+  initial_speed_mps: 0.0
+  initial_track_heading_deg: [-180.0, 180.0]
+  initial_vertical_speed_mps: 0.0
+  initial_turn_rate_deg_s: 0.0
+  cruise_min_speed_mps: 4.0
+  hover_speed_tolerance_mps: 0.25
+  # Completion tolerances are simulation event-label thresholds, not source parameters.
+  target_tolerance_speed_mps: 0.25
+  target_tolerance_vertical_speed_mps: 0.1
+  target_tolerance_turn_rate_deg_s: 1.0
+  mode_index_map:
+    hover: 0
+    vertical: 1
+    transition: 2
+    cruise: 3
+    turn: 4
+    decelerating: 5
+  modes:
+    # All duration ranges are engineering minimum/reference holds, not source measurements.
+    initial_hover:
+      mode_class: hover
+      duration_s: [2.0, 2.5]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    climb:
+      mode_class: vertical
+      duration_s: [3.5, 4.5]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [1.0, 1.3]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    level_off_hover:
+      mode_class: hover
+      duration_s: [1.5, 2.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    # This smoother 4--5 s engineering transition is not Tal's 3 s demonstration replay.
+    forward_transition:
+      mode_class: transition
+      duration_s: [4.0, 5.0]
+      target_speed_mps: [5.5, 6.5]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    outbound_cruise:
+      mode_class: cruise
+      duration_s: [4.0, 5.0]
+      target_speed_mps: [5.5, 6.5]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    # Speed and track-turn ranges are sampled jointly against the configured acceleration budget.
+    left_turn:
+      mode_class: turn
+      duration_s: [6.0, 7.0]
+      target_speed_mps: [5.5, 6.5]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [14.0, 20.0]
+    right_turn:
+      mode_class: turn
+      duration_s: [6.0, 7.0]
+      target_speed_mps: [5.5, 6.5]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [-20.0, -14.0]
+    return_cruise:
+      mode_class: cruise
+      duration_s: [4.0, 5.0]
+      target_speed_mps: [5.5, 6.5]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    back_transition:
+      mode_class: transition
+      duration_s: [4.0, 5.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    pre_descent_hover:
+      mode_class: hover
+      duration_s: [1.5, 2.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    # Optional seeded descent is a simulation setting, not an identified sink-rate range.
+    optional_descent:
+      mode_class: vertical
+      duration_s: [3.5, 4.5]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [-1.3, -1.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    final_hover:
+      mode_class: hover
+      duration_s: [3.0, 4.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+  ordering_alternatives:
+    - [initial_hover, climb, level_off_hover, forward_transition, outbound_cruise, left_turn, return_cruise, back_transition, pre_descent_hover, optional_descent, final_hover]
+    - [initial_hover, climb, level_off_hover, forward_transition, outbound_cruise, right_turn, return_cruise, back_transition, pre_descent_hover, optional_descent, final_hover]
+    - [initial_hover, climb, level_off_hover, forward_transition, outbound_cruise, left_turn, return_cruise, back_transition, pre_descent_hover, final_hover]
+    - [initial_hover, climb, level_off_hover, forward_transition, outbound_cruise, right_turn, return_cruise, back_transition, pre_descent_hover, final_hover]

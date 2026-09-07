@@ -1,0 +1,68 @@
+# Local environments, caches, tooling state, and logs.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+.codeboarding/
+.codex/
+.agents/
+.idea/
+.vscode/
+*.log
+.DS_Store
+Thumbs.db
+
+# Credentials must stay outside the public repository.
+.env
+.env.*
+!.env.example
+!.env.*.example
+.netrc
+_netrc
+.pypirc
+.npmrc
+credentials*.json
+client_secret*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Original archives and binary datasets/checkpoints are stored locally.
+*.zip
+*.7z
+*.tar
+*.gz
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Retain source provenance written for this project, not upstream materials.
+/data_sources/**
+!/data_sources/**/
+!/data_sources/AGENTS.md
+!/data_sources/README.md
+!/data_sources/*/README.md
+!/data_sources/*/SOURCE.md
+# This README is an unmodified upstream document, not our provenance record.
+/data_sources/bitcraze_positioning/README.md
+
+# Keep directory guidance, but not generated datasets, exports, or scratch files.
+/outputs/*
+!/outputs/AGENTS.md
+!/outputs/README.md
+/temp/*
+!/temp/AGENTS.md
+!/temp/README.md

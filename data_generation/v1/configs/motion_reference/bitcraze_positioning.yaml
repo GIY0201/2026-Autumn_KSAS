@@ -1,0 +1,75 @@
+config_id: bitcraze_positioning_lh2_kalman_motion_reference_v1
+artifact_kind: source_motion_reference_analysis
+
+source:
+  source_id: bitcraze_positioning
+  repository_url: https://github.com/bitcraze/positioning_dataset
+  repository_commit: 275865f169ace04221daf7e7630b98d97fde41bd
+  timestamp_scale_s: 0.001
+  timestamp_unit: ms
+  position_unit: m
+  supported_column_counts: [4, 16]
+  first_four_columns: [timestamp_ms, marker_centroid_x_m, marker_centroid_y_m, marker_centroid_z_m]
+  files:
+    - id: mocap00
+      path: data_sources/bitcraze_positioning/data/lh2_kalman_flight/mocap00.npy
+      sha256: 0f37eab8f4d08cfa59790308da726fd3d1881122c2b702baca2584a26a34ad36
+      url: https://raw.githubusercontent.com/bitcraze/positioning_dataset/275865f169ace04221daf7e7630b98d97fde41bd/data/lh2_kalman_flight/mocap00.npy
+      motion_pattern: sweep
+      nominal_mean_speed_mps: 0.25
+    - id: mocap01
+      path: data_sources/bitcraze_positioning/data/lh2_kalman_flight/mocap01.npy
+      sha256: f53f465a83801a6696e8f0302b5ae5ce2b0b0ef1c817d8d4325e9ae5612fca6d
+      url: https://raw.githubusercontent.com/bitcraze/positioning_dataset/275865f169ace04221daf7e7630b98d97fde41bd/data/lh2_kalman_flight/mocap01.npy
+      motion_pattern: sweep
+      nominal_mean_speed_mps: 0.5
+    - id: mocap02
+      path: data_sources/bitcraze_positioning/data/lh2_kalman_flight/mocap02.npy
+      sha256: b081c5fd07a077d1b4395754a531e5f5bfa2508c3ebb03c1707db0c726ebbb1e
+      url: https://raw.githubusercontent.com/bitcraze/positioning_dataset/275865f169ace04221daf7e7630b98d97fde41bd/data/lh2_kalman_flight/mocap02.npy
+      motion_pattern: random
+      nominal_mean_speed_mps: 0.25
+    - id: mocap03
+      path: data_sources/bitcraze_positioning/data/lh2_kalman_flight/mocap03.npy
+      sha256: a844ffad04fed3e085a03e02fd637d1b00e8ed3db2d09e009d5d6ef6742e8320
+      url: https://raw.githubusercontent.com/bitcraze/positioning_dataset/275865f169ace04221daf7e7630b98d97fde41bd/data/lh2_kalman_flight/mocap03.npy
+      motion_pattern: random
+      nominal_mean_speed_mps: 0.5
+
+splits:
+  calibration_flight_ids: [mocap00, mocap01]
+  comparison_flight_ids: [mocap02, mocap03]
+
+analysis:
+  maximum_gap_s: 0.05
+  resample_dt_s: 0.02
+  savgol_window_samples: 11
+  savgol_polynomial_degree: 3
+  discard_edge_samples: 5
+  flight_only_min_z_m: 0.2
+  low_speed_threshold_mps: 0.1
+  quantiles: [0.05, 0.5, 0.95, 0.99]
+
+reference_envelope:
+  calibration_quantile: 0.95
+  maximum_reference_peak_speed_mps: 0.75
+  maximum_reference_peak_acceleration_mps2: 1.0
+  engineering_speed_margin_mps: 0.05
+  engineering_acceleration_margin_mps2: 0.1
+
+planner:
+  mode: source_grounded
+  target_bounds_enu_m:
+    minimum: [-0.75, -0.75, 0.25]
+    maximum: [0.75, 0.75, 1.25]
+  nominal_mean_speeds_mps: [0.25, 0.5]
+  minimum_leg_distance_m: 0.35
+  maximum_target_sampling_attempts: 64
+  minimum_duration_s: 1.0
+  maximum_duration_s: 15.0
+  maximum_peak_speed_mps: ${reference_envelope.maximum_reference_peak_speed_mps}
+  maximum_peak_acceleration_mps2: ${reference_envelope.maximum_reference_peak_acceleration_mps2}
+  blend_peak_speed_factor: 2.1875
+  blend_peak_acceleration_factor: 7.513188404399293
+  maximum_hold_duration_s: 8.0
+  settling_duration_s: 0.4

@@ -1,0 +1,15 @@
+seed: 17
+ui:
+  label: "[개발자 점검] X8 고정익 UAV · 원본 운동 비교"
+  description: "일반 생성에는 필요 없는 점검용입니다. X8 궤적 1개 생성에 TRAIN 원본 13개와의 운동 비교 보고서를 추가합니다. 더 좋은 궤적을 생성하거나 검증 합격을 보장하는 기능은 아닙니다."
+mode: diagnostic
+episode_count: 1
+identity_label: X8 고정익 UAV
+source_motion_check_status: REPORT_ONLY
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

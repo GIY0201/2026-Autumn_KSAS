@@ -1,0 +1,131 @@
+{
+  "nodes": [
+    {
+      "id": "a01b02c03d04e05f",
+      "type": "text",
+      "x": 0,
+      "y": 160,
+      "width": 300,
+      "height": 220,
+      "color": "5",
+      "text": "# 1. 관측\n\n최근 3초의 3차원 위치 16개\n\ntimestamp와 센서오차"
+    },
+    {
+      "id": "b11c12d13e14f150",
+      "type": "text",
+      "x": 390,
+      "y": 180,
+      "width": 300,
+      "height": 180,
+      "color": "5",
+      "text": "# 2. GRU encoder\n\n관측 순서에서 미세한 기동 징후를 찾아 공유 시간 특징을 생성"
+    },
+    {
+      "id": "c21d22e23f240251",
+      "type": "group",
+      "x": 780,
+      "y": 0,
+      "width": 430,
+      "height": 570,
+      "color": "5",
+      "label": "3. GRU의 확률 출력"
+    },
+    {
+      "id": "d31e32f330415263",
+      "type": "text",
+      "x": 820,
+      "y": 60,
+      "width": 350,
+      "height": 105,
+      "text": "## 현재 기동 확률\n직진 70% · 선회 25% · 상승 5%"
+    },
+    {
+      "id": "e41f425364758697",
+      "type": "text",
+      "x": 820,
+      "y": 185,
+      "width": 350,
+      "height": 105,
+      "text": "## 남은 지속시간\n1초 내 종료 10% · 3초 내 종료 30%"
+    },
+    {
+      "id": "f5162738495a6b7c",
+      "type": "text",
+      "x": 820,
+      "y": 310,
+      "width": 350,
+      "height": 105,
+      "text": "## 기동의 세기\n가속·감속·회전률·상승률의 분포"
+    },
+    {
+      "id": "061728394a5b6c7d",
+      "type": "text",
+      "x": 820,
+      "y": 435,
+      "width": 350,
+      "height": 105,
+      "color": "2",
+      "text": "## Surprise score\n새 관측이 기존 예측과 얼마나 다른지 감시"
+    },
+    {
+      "id": "1728394a5b6c7d8e",
+      "type": "text",
+      "x": 1300,
+      "y": 100,
+      "width": 380,
+      "height": 230,
+      "color": "3",
+      "text": "# 4. 기동 시나리오\n\nA. 계속 직진 55%\n\nB. 2초 뒤 오른쪽 선회 30%\n\nC. 1초 뒤 상승 15%"
+    },
+    {
+      "id": "28394a5b6c7d8e9f",
+      "type": "text",
+      "x": 1300,
+      "y": 440,
+      "width": 380,
+      "height": 200,
+      "color": "4",
+      "text": "# 5. 운동방정식\n\n각 시나리오를 0.2초 간격으로 75번 전개하여 향후 15초 위치 분포 생성"
+    },
+    {
+      "id": "394a5b6c7d8e9fa0",
+      "type": "text",
+      "x": 790,
+      "y": 690,
+      "width": 430,
+      "height": 210,
+      "color": "4",
+      "text": "# 6. 경로별 점유 회랑\n\n위치 분포 + 센서오차 + 7 m 객체 크기\n\n각 시나리오의 회랑을 확률과 함께 유지"
+    },
+    {
+      "id": "4a5b6c7d8e9fa0b1",
+      "type": "text",
+      "x": 240,
+      "y": 690,
+      "width": 410,
+      "height": 210,
+      "color": "6",
+      "text": "# 7. 최종 점유 분포\n\n가까운 미래는 좁고, 멀고 불확실한 미래는 넓은 시간별 3차원 점유 영역"
+    },
+    {
+      "id": "5b6c7d8e9fa0b1c2",
+      "type": "text",
+      "x": 790,
+      "y": 980,
+      "width": 500,
+      "height": 185,
+      "color": "2",
+      "text": "# 갑작스러운 기동\n\nSurprise score 상승 → 기동 확률 재계산 → 0.2초마다 전체 회랑 갱신\n\n징후 없는 급기동은 별도의 물리적 대비 영역 필요"
+    }
+  ],
+  "edges": [
+    {"id":"6c7d8e9fa0b1c2d3","fromNode":"a01b02c03d04e05f","fromSide":"right","toNode":"b11c12d13e14f150","toSide":"left","toEnd":"arrow"},
+    {"id":"7d8e9fa0b1c2d3e4","fromNode":"b11c12d13e14f150","fromSide":"right","toNode":"c21d22e23f240251","toSide":"left","toEnd":"arrow"},
+    {"id":"8e9fa0b1c2d3e4f5","fromNode":"c21d22e23f240251","fromSide":"right","toNode":"1728394a5b6c7d8e","toSide":"left","toEnd":"arrow"},
+    {"id":"9fa0b1c2d3e4f506","fromNode":"1728394a5b6c7d8e","fromSide":"bottom","toNode":"28394a5b6c7d8e9f","toSide":"top","toEnd":"arrow"},
+    {"id":"a0b1c2d3e4f50617","fromNode":"28394a5b6c7d8e9f","fromSide":"left","toNode":"394a5b6c7d8e9fa0","toSide":"right","toEnd":"arrow"},
+    {"id":"b1c2d3e4f5061728","fromNode":"394a5b6c7d8e9fa0","fromSide":"left","toNode":"4a5b6c7d8e9fa0b1","toSide":"right","toEnd":"arrow"},
+    {"id":"c2d3e4f506172839","fromNode":"061728394a5b6c7d","fromSide":"bottom","toNode":"5b6c7d8e9fa0b1c2","toSide":"top","toEnd":"arrow","color":"2","label":"예측과 관측 차이"},
+    {"id":"d3e4f5061728394a","fromNode":"5b6c7d8e9fa0b1c2","fromSide":"left","toNode":"b11c12d13e14f150","toSide":"bottom","toEnd":"arrow","color":"2","label":"새 관측으로 재계산"}
+  ]
+}

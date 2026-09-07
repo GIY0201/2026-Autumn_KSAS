@@ -1,0 +1,14 @@
+# Availability is derived from executable presets, not a manually set ready flag.
+objects:
+  - object_id: x8_fixed_wing
+    label: X8 고정익 UAV
+    unavailable_reason: X8 생성 설정이 등록되지 않았습니다.
+  - object_id: quadrotor
+    label: 쿼드콥터 · Crazyflie 2.1
+    unavailable_reason: 공개된 식별 계수의 운동 계산과 생성 연결을 검증 중입니다.
+  - object_id: vtol
+    label: VTOL
+    unavailable_reason: 실행 가능한 VTOL profile/config가 아직 등록되지 않았습니다.
+  - object_id: helicopter
+    label: 일반 헬기
+    unavailable_reason: 실행 가능한 헬기 profile/config가 아직 등록되지 않았습니다.

@@ -1,0 +1,38 @@
+[project]
+name = "ksas-x8-generator"
+version = "0.1.0"
+description = "X8-based synthetic 3D trajectory generation and replay"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dash>=3.0,<4",
+    "hydra-core>=1.3,<2",
+    "kaleido>=1.0,<2",
+    "numpy>=2.0,<3",
+    "omegaconf>=2.3,<3",
+    "plotly>=6.0,<7",
+    "scipy>=1.14,<2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0,<9",
+    "ruff>=0.9,<1",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+cache_dir = "temp/pytest-cache"
+pythonpath = ["."]
+testpaths = [
+    "contracts/v1/tests",
+    "data_generation/v1/tests",
+    "visualization/v1/tests",
+]
+
+[tool.ruff]
+cache-dir = "temp/ruff-cache"
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B"]

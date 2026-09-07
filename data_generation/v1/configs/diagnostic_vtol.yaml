@@ -1,0 +1,15 @@
+seed: 17
+profile_id: tal_tailsitter_motion_v1
+ui:
+  label: "VTOL · 간소화 운동모델 · 1개 미리보기"
+  description: "명시적 phase-aware simulation settings와 공개 Tal Tailsitter 기동 맥락으로 1개를 생성합니다. 실기체 device 모델·trajectory fitting·field validation을 주장하지 않습니다."
+mode: diagnostic
+episode_count: 1
+source_motion_check_status: NOT_RUN
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

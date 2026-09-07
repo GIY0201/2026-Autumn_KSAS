@@ -1,0 +1,107 @@
+# Evidence-informed reduced-motion simulation. It is not a NASA UH-60 device-model reproduction.
+engine: bounded_motion
+object_id: helicopter
+model_id: uh60_motion_v1
+identity_label: "헬기 · UH-60 참고 운동모델"
+source_id: nasa_uh60_1984
+input_id: ntrs:19840015585
+evidence_status: EVIDENCE_INFORMED_KINEMATIC
+metadata:
+  motion_abstraction: bounded_track_kinematics
+  operating_parameter_role: simulation_design
+  source_model_role: published_trim_reference_not_rawlog_fit
+source_files:
+  - path: data_sources/nasa_uh60_1984/19840015585.pdf
+    sha256: 2bc58d43a399c4ef09c96eb704f01d384c43f70583d586826368358fcf88fc0c
+    url: https://ntrs.nasa.gov/api/citations/19840015585/downloads/19840015585.pdf
+source_evidence:
+  - location: "Table 4, PDF p. 21"
+    statement: "Published level-flight trim reference at equivalent airspeed 1, 20, 40, 60, 100, and 140 kt."
+    use: published_model_trim_reference_not_ground_speed_or_rawlog_fit
+limitations:
+  - The NASA model and controller are not reproduced.
+  - ENU operating limits and transients are simulation design, not fitted or certified limits.
+  - No raw-log fit, field validation, rotor, stabilator, actuator, or 6-DOF device dynamics is implemented.
+  - Conventional helicopter motion only; no aerobatics, terrain, or landing contact is represented.
+motion:
+  dt_s: 0.02
+  horizontal_speed_max_mps: 40.0
+  vertical_speed_max_mps: 4.0
+  horizontal_accel_max_mps2: 2.5
+  vertical_accel_max_mps2: 1.0
+  turn_rate_max_deg_s: 20.0
+  speed_response_s: 2.0
+  vertical_response_s: 1.2
+  turn_response_s: 0.8
+experiment:
+  role: simulation_design_not_airframe_coefficients
+  initial_position_enu_m: [0.0, 0.0, 0.0]
+  initial_speed_mps: 0.0
+  initial_track_heading_deg: [-180.0, 180.0]
+  initial_vertical_speed_mps: 0.0
+  initial_turn_rate_deg_s: 0.0
+  hover_speed_tolerance_mps: 0.25
+  # Completion tolerances are simulation event-label thresholds, not source parameters.
+  target_tolerance_speed_mps: 0.25
+  target_tolerance_vertical_speed_mps: 0.1
+  target_tolerance_turn_rate_deg_s: 1.0
+  mode_index_map:
+    hover: 0
+    vertical: 1
+    forward: 2
+    turn: 3
+    decelerating: 4
+    translate: 5
+    transition: 6
+  modes:
+    hover:
+      mode_class: hover
+      duration_s: [2.0, 4.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    climb:
+      mode_class: vertical
+      duration_s: [4.0, 6.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [1.5, 3.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    forward:
+      mode_class: forward
+      duration_s: [8.0, 12.0]
+      target_speed_mps: [15.0, 30.0]
+      target_vertical_speed_mps: [-0.5, 0.5]
+      target_turn_rate_deg_s: [-2.0, 2.0]
+    left_turn:
+      mode_class: turn
+      duration_s: [5.0, 8.0]
+      target_speed_mps: [15.0, 30.0]
+      target_vertical_speed_mps: [-1.0, 1.0]
+      target_turn_rate_deg_s: [8.0, 18.0]
+    right_turn:
+      mode_class: turn
+      duration_s: [5.0, 8.0]
+      target_speed_mps: [15.0, 30.0]
+      target_vertical_speed_mps: [-1.0, 1.0]
+      target_turn_rate_deg_s: [-18.0, -8.0]
+    brake:
+      mode_class: decelerating
+      duration_s: [8.0, 12.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [0.0, 0.0]
+      target_turn_rate_deg_s: [0.0, 0.0]
+    translate:
+      mode_class: translate
+      duration_s: [4.0, 6.0]
+      target_speed_mps: [2.0, 6.0]
+      target_vertical_speed_mps: [-0.5, 0.5]
+      target_turn_rate_deg_s: [-20.0, 20.0]
+    descent:
+      mode_class: vertical
+      duration_s: [4.0, 6.0]
+      target_speed_mps: [0.0, 0.0]
+      target_vertical_speed_mps: [-3.0, -1.5]
+      target_turn_rate_deg_s: [0.0, 0.0]
+  ordering_alternatives:
+    - [hover, climb, forward, left_turn, right_turn, brake, hover, translate, descent]
+    - [hover, climb, translate, forward, right_turn, left_turn, brake, descent, hover]

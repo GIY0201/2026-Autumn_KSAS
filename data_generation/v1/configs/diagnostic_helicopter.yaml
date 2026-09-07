@@ -1,0 +1,15 @@
+seed: 17
+profile_id: uh60_motion_v1
+ui:
+  label: "헬기 · 간소화 운동모델 · 1개 미리보기"
+  description: "공개 UH-60 trim 참고와 명시된 simulation settings로 1개를 생성합니다. 내부 device 모델이나 field validation을 주장하지 않습니다."
+mode: diagnostic
+episode_count: 1
+source_motion_check_status: NOT_RUN
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
