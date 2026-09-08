@@ -138,6 +138,7 @@ outputs/visualization/v1/090b520c-ecfd-4124-85ee-14d3d8ed82d5/
 git clone https://github.com/GIY0201/2026-Autumn_KSAS.git 2026_KSAS
 cd 2026_KSAS
 uv sync --locked
+uv run python data_sources/tal_tailsitter_2022/fetch_source.py
 ```
 
 원본이 필요 없는 X8 `diagnostic` 생성과 달리, X8 source motion check 및 쿼드콥터·VTOL·헬기 profile은 별도 원본이 필요합니다. 각 `data_sources/<source_id>/README.md` 또는 `SOURCE.md`와 `data_generation/v1/configs/profiles/`, `configs/motion_reference/`에 기록된 출처·고정 버전·경로·hash를 따라 자료를 준비해야 합니다. 자료별 원래 이용 조건을 따르며 프로젝트 MIT LICENSE를 외부 자료에 적용하지 않습니다. 원본 부재나 hash 불일치 검사를 우회하지 않습니다.

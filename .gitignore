@@ -56,6 +56,7 @@ client_secret*.json
 !/data_sources/README.md
 !/data_sources/*/README.md
 !/data_sources/*/SOURCE.md
+!/data_sources/tal_tailsitter_2022/fetch_source.py
 # This README is an unmodified upstream document, not our provenance record.
 /data_sources/bitcraze_positioning/README.md
 
