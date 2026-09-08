@@ -1,0 +1,7 @@
+z_weights: [1, 2, 3, 5]
+seeds: [17, 29, 43]
+window_seed: 17
+cudnn_enabled: false
+selection_metric: ade_m
+selection_checkpoint: best
+tie_break: lower_z_weight

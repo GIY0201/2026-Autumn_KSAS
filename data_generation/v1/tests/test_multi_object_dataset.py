@@ -457,3 +457,33 @@ def test_legacy_x8_request_keeps_the_existing_x8_diagnostic_columns(tmp_path: Pa
         "right_elevon_rad",
         "throttle",
     ]
+def test_explicit_episode_splits_require_exact_ids_labels_and_counts() -> None:
+    episode_ids = [f"episode-{index:03d}" for index in range(160)]
+    valid = {
+        episode_id: (
+            "train" if index < 112 else "validation" if index < 136 else "test"
+        )
+        for index, episode_id in enumerate(episode_ids)
+    }
+    assert dataset_module.assign_episode_splits(
+        episode_ids, master_seed=17, diagnostic=False, explicit=valid
+    ) == valid
+
+    missing = dict(valid)
+    missing.pop(episode_ids[-1])
+    with pytest.raises(ValueError, match="IDs"):
+        dataset_module.assign_episode_splits(
+            episode_ids, master_seed=17, diagnostic=False, explicit=missing
+        )
+    invalid = dict(valid)
+    invalid[episode_ids[-1]] = "diagnostic"
+    with pytest.raises(ValueError, match="label"):
+        dataset_module.assign_episode_splits(
+            episode_ids, master_seed=17, diagnostic=False, explicit=invalid
+        )
+    wrong_count = dict(valid)
+    wrong_count[episode_ids[111]] = "validation"
+    with pytest.raises(ValueError, match="70/15/15"):
+        dataset_module.assign_episode_splits(
+            episode_ids, master_seed=17, diagnostic=False, explicit=wrong_count
+        )

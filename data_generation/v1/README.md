@@ -190,8 +190,10 @@ X8 TRAIN 13개에 대한 motion check는 학습되지 않은 고정 모델의 �
 # 전체 시나리오와 학습 데이터 함께 생성 (2026-09-08)
 
 8088 UI에서 `고정익 / 헬기 / VTOL · 모든 시나리오 + 학습데이터`를 선택하고
-`데이터 생성`을 누른다. 현재 catalog 기준 64 / 96 / 64 Episode를 생성한다.
-`repeats_per_scenario`와 catalog에서 생성량을 계산하며 기본 반복은 1회다.
+`데이터 생성`을 누른다. 현재 설정 기준 고정익 64 / 헬기 96 / VTOL 160 Episode를 생성한다.
+고정익·헬기는 `repeats_per_scenario`와 catalog에서 생성량을 계산한다. VTOL은
+`phase_direction_marginal_v1` schedule을 사용해 Train 112 / Validation 24 / Test 24로
+고정하고, 각 split의 상승·순항·하강 행동과 선회 좌·우 수를 같게 만든다.
 기존 `전체 이착륙 · 1개 미리보기`는 한 시나리오만 생성하는 별도 설정이다.
 
 ```powershell
@@ -203,19 +205,24 @@ X8 TRAIN 13개에 대한 motion check는 학습되지 않은 고정 모델의 �
 각 새 dataset에는 다음을 함께 보관한다.
 
 - `public/observations.csv`: 기존 5 Hz 관측 위치·timestamp·sigma·valid. 관측오차 3종.
-- `public/episodes.csv`: 부모 Episode 단위 split. 70% TRAIN, 15% validation은 내림,
-  나머지는 test이므로 64개는 44/9/11, 96개는 67/14/15다.
+- `public/episodes.csv`: 부모 Episode 단위 split. 일반 corpus는 70% TRAIN, 15%
+  validation을 내림하고 나머지를 test로 둔다. 균형 VTOL corpus는 112/24/24를
+  schedule에서 명시하고 writer가 전체 ID와 비율을 검증한다.
 - `training/sequences.csv`: 공개 관측을 참조하는 학습용 구간 목록. 시작·끝 step은 양끝 포함.
+- `training/balanced_windows.csv`: VTOL 행동 균형 corpus에서 GRU가 읽는 label-free 고정 index.
 - `training/summary.csv`: split별 Episode·시퀀스·행 수.
-- `evaluation/`: 실제 위치·속도·가속도 및 기동 명령. 학습에서 사용하지 않는다.
+- `evaluation/`: 실제 위치·속도·가속도, 기동 명령과 `behavior_balance.csv`. 학습 feature나 target에서 읽지 않는다.
 - 기존 `manifest.csv`, `files.csv`, 설정·환경·출처 기록에는 학습 목록도 함께 추적한다.
 
-기본 `training.window_samples=null`은 **긴 관측 비행 전체**를 한 시퀀스로 보존한다.
-위치 전용 목록은 관측오차 3종이므로 64 Episode에 192 시퀀스다. 식별 패턴 3종까지 적용한 입력은 576개이며 `identity_summary.csv`에서 확인한다. 독립 비행 수는 64개로 같다.
-GRU/RED-SDS 모델, 학습 target, 정규화, context 길이, 학습 성능은 구현/확정하지 않는다.
+일반 corpus의 `training.window_samples=null`은 **긴 관측 비행 전체**를 한 시퀀스로
+보존한다. 균형 VTOL corpus는 GRU Direct v1 계약에 맞춘 91 sample window를 쓴다.
+Train core는 12개 행동마다 256개이며 선회성 행동은 좌·우 128개씩이다. 행동 시작과
+종료를 가로지르는 transition window는 별도 pool로 보존한다. Validation/Test는 기존
+75-sample 고정 stride를 유지한다.
 
-길이를 명시하면 TRAIN 시작점은 seed로 무작위 추출하고 validation/test는 고정 stride로
-선택한다. 동일 Episode의 모든 variant와 window는 같은 split에 남는다.
+일반 corpus에서 길이를 명시하면 TRAIN 시작점은 seed로 무작위 추출하고
+validation/test는 고정 stride로 선택한다. 균형 VTOL corpus의 TRAIN 시작점은
+`balanced_windows.csv`로 고정한다. 동일 Episode의 모든 variant와 window는 같은 split에 남는다.
 길이가 Episode를 초과하면 오류이며 조용히 건너뛰거나 패딩하지 않는다.
 
 ```powershell

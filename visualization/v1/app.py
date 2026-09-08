@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs
 
 from dash import Dash, Input, Output, Patch, State, ctx, dcc, html, no_update
 
@@ -20,6 +21,7 @@ from .figures import (
 )
 from .generation_ui import DatasetRegistry, generation_panel, register_generation_callbacks
 from .telemetry import telemetry_content, telemetry_panel
+from .training_ui import register_training_callbacks, training_panel
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _VIEW_IDS = ("xy", "xz", "yz", "3d")
@@ -425,6 +427,8 @@ def create_app(
     public_only: bool = False,
     output_root: Path | None = None,
     generation_service: GenerationService | None = None,
+    training_service=None,
+    simulation_service=None,
 ) -> Dash:
     """Build a local-only generator/viewer starting with one explicit dataset path."""
     dataset = load_viewer_dataset(Path(dataset_path), public_only=public_only)
@@ -441,18 +445,57 @@ def create_app(
     registry = DatasetRegistry(dataset, public_only=public_only)
     registry.discover_saved(jobs.output_root)
     app.server.extensions["generation_service"] = jobs
+    if training_service is None:
+        from models.runtime.v1.service import TrainingService
+
+        training_service = TrainingService(_PROJECT_ROOT)
+    app.server.extensions["training_service"] = training_service
+    from .simulation_routes import register_simulation_routes
+
+    app.server.extensions["simulation_service"] = register_simulation_routes(
+        app.server, _PROJECT_ROOT, simulation_service
+    )
     app.layout = html.Div(
         [
+            dcc.Location(id="workspace-location", refresh=False),
+            html.A("비행 시뮬레이션 열기", href="/simulation", className="simulation-link"),
             html.Header(
                 html.H1("데이터 생성 · 궤적 재생", className="page-title"),
                 className="generation-masthead",
             ),
-            generation_panel(jobs, registry),
-            html.Div(id="dataset-load-error", className="dataset-load-error", role="alert"),
-            html.Div(_viewer_layout(dataset), id="viewer-container"),
+            dcc.Tabs(
+                id="workspace-tabs",
+                value="data",
+                children=[
+                    dcc.Tab(
+                        label="데이터 생성 · 궤적 재생",
+                        value="data",
+                        children=[
+                            generation_panel(jobs, registry),
+                            html.Div(
+                                id="dataset-load-error",
+                                className="dataset-load-error",
+                                role="alert",
+                            ),
+                            html.Div(_viewer_layout(dataset), id="viewer-container"),
+                        ],
+                    ),
+                    dcc.Tab(
+                        label="Training",
+                        value="training",
+                        children=training_panel(training_service),
+                    ),
+                ],
+            ),
         ]
     )
     register_generation_callbacks(app, jobs, registry)
+    register_training_callbacks(app, training_service)
+
+    @app.callback(Output("workspace-tabs", "value"), Input("workspace-location", "search"))
+    def select_workspace(search):
+        requested = parse_qs((search or "").lstrip("?")).get("workspace")
+        return "training" if requested == ["training"] else "data"
 
     @app.callback(
         Output("telemetry-content", "children"),

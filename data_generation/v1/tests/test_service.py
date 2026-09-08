@@ -93,7 +93,7 @@ def test_presets_come_from_real_configs_with_readable_names():
         assert preset.label == config.ui.label
         if config.mode == "corpus":
             assert preset.episode_count == {
-                "fixed_wing": 64, "helicopter": 96, "vtol": 64,
+                    "fixed_wing": 64, "helicopter": 96, "vtol": 160,
             }[preset.object_id]
         else:
             assert preset.episode_count == config.episode_count

@@ -1,13 +1,21 @@
 seed: 17
 profile_id: vtol_full_flight_v1
 mode: corpus
-repeats_per_scenario: 1
+balance:
+  strategy: phase_direction_marginal_v1
+  split_episode_counts:
+    train: 112
+    validation: 24
+    test: 24
 source_motion_check_status: NOT_RUN
 training:
-  # Full continuous observation sequences; no model-specific context is assumed.
-  window_samples: null
+  window_samples: 91
   train_windows_per_episode: 8
   evaluation_stride_samples: 75
+  behavior_balance:
+    schema: behavior-window-balance-v1
+    core_windows_per_behavior: 256
+    transition_windows_per_boundary: 1
   identity:
     transition_margin_s: 3.0
 ui:

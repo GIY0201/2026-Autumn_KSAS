@@ -1,0 +1,31 @@
+.training-console { color: #202020; background: #fff; padding: 1.4rem; max-width: 1600px; margin: auto; font-family: "Segoe UI", "Malgun Gothic", sans-serif; }
+.training-statusbar, .training-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.training-statusbar { border-bottom: 1px solid #c9cdd1; padding-bottom: .7rem; }
+.training-statusbar h2 { margin: 0; font-size: 1.4rem; }
+.training-statusbar [role=status] { flex: 1; }
+.training-console details { border-bottom: 1px solid #d6d9dc; padding: .9rem 0; }
+.training-console summary { cursor: pointer; font-weight: 600; padding: .35rem; }
+.training-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .8rem 1.1rem; margin: 1rem 0; }
+.training-field { min-width: 0; }
+.training-field label { display: block; font-size: .9rem; margin-bottom: .3rem; overflow-wrap: anywhere; }
+.training-field input { width: 100%; box-sizing: border-box; min-height: 38px; }
+.training-console button, .training-console input { border: 1px solid #969da4; border-radius: 3px; background: #fff; color: #202020; padding: .55rem .8rem; }
+.training-console button { cursor: pointer; min-height: 42px; }
+.training-console button:disabled { cursor: default; opacity: .55; }
+.training-console :focus-visible { outline: 3px solid #1769aa; outline-offset: 2px; }
+.training-console [role=alert] { color: #9c2e1d; padding: .5rem 0; overflow-wrap: anywhere; }
+.training-graphs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.training-console, .training-console > *, .training-graphs > * { min-width: 0; box-sizing: border-box; }
+.training-console .dash-graph { width: 100%; max-width: 100%; min-width: 0; }
+.training-console .js-plotly-plot, .training-console .plot-container { width: 100%; max-width: 100%; }
+.training-console .dash-graph { height: 450px; min-height: 450px; }
+.training-console #training-runtime { height: 580px; min-height: 580px; }
+.training-contract, .training-console pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow: auto; font-size: .85rem; }
+.training-table-wrap { overflow-x: auto; }
+.training-console table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+.training-console table { table-layout: fixed; min-width: 760px; }
+.training-console th:nth-child(1) { width: 15%; }
+.training-console th:nth-child(3) { width: 19%; }
+.training-console th:nth-child(7) { width: 14%; }
+.training-console th, .training-console td { text-align: left; padding: .7rem; border-bottom: 1px solid #d6d9dc; max-width: 300px; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .training-console { padding: .6rem; } .training-graphs { grid-template-columns: 1fr; } .training-statusbar { align-items: flex-start; } }

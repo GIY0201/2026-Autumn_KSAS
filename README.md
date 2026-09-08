@@ -1,5 +1,15 @@
 # 2026 KSAS
 
+## GRU Direct 학습 환경 — 2026-09-08
+
+8088 앱의 **Training** tab에서 모델 parameter/preset 저장, 학습 시작·중지,
+명시적 checkpoint 재개, 학습 곡선과 validation 3D 예측을 확인할 수 있습니다.
+GRU Direct v1은 3초 위치·시간16개로 미래15초 XYZ75개를 출력합니다.
+전체 VTOL baseline 학습과 검증 결과는
+[GRU 실행 기록](plan/gru_direct_v1_implementation.md), 실행/API 사용법은
+[모델 안내](models/gru/v1/README.md)와 [학습 runtime](models/runtime/v1/README.md)을
+따릅니다. 아래의 모델 미구현 표기는 이전 데이터 생성 단계의 기록입니다.
+
 > 현재 데이터 생성 방식은 [데이터 생성 안내](plan/data_generation_current.md)를 먼저 확인하세요. 관측오차 3종·식별 패턴 3종·train/valid/test 저장과 아직 남은 모델 학습 작업을 구분했습니다. 아래의 60초·이전 모델·실행 결과 서술은 해당 단계의 기록입니다.
 
 동적 공중 객체의 미래 점유 영역 예측 연구를 위한 독립 작업 공간입니다.
@@ -7,6 +17,8 @@
 ## 전체 이착륙 시나리오 — 2026-09-08 추가
 
 기존 60초 경로와 별도로 `full_flight_fixed_wing`, `full_flight_helicopter`, `full_flight_vtol` 생성 설정을 추가했습니다. 최대 600초·5 Hz의 질점 궤적이며 F64/H96/V64 조합을 명시적으로 선택할 수 있습니다. 아래의 기존 60초 설명은 legacy 경로에 해당합니다. 수치 설정은 생성용 가정이며 Gazebo 동역학을 실행하거나 실기체 운용 한계를 검증한 모델은 아닙니다.
+
+학습용 `corpus_vtol`은 행동·방향 균형 설정을 사용해 160 Episode(Train 112 / Validation 24 / Test 24)를 새 dataset ID로 생성합니다. 상승·순항·하강의 각 행동은 split 안에서 같은 Episode 수를 가지며, 선회성 행동은 좌·우가 같습니다. Train은 행동별 256개 core window와 별도 transition window를 dataset index로 고정합니다. 상세 계약은 [균형 corpus 설계](plan/balanced_vtol_corpus_design.md)를 따릅니다.
 
 ```powershell
 .\.venv\Scripts\python.exe -m data_generation.v1 --config-name full_flight_fixed_wing scenario_id=F05-D seed=17

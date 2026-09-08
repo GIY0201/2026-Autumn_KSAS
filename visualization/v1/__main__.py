@@ -48,6 +48,7 @@ def main() -> None:
         app.run(host=arguments.host, port=arguments.port, debug=False, threaded=False)
     finally:
         app.server.extensions["generation_service"].close()
+        app.server.extensions["simulation_service"].close()
 
 
 if __name__ == "__main__":

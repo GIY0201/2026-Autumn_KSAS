@@ -1,4 +1,4 @@
-"""Behavioral checks for connected full-flight point-mass scenarios."""
+from uuid import NAMESPACE_URL, uuid5
 
 import numpy as np
 import pytest
@@ -51,6 +51,45 @@ def test_catalog_choice_and_seed_are_explicit_and_reproducible():
     assert "cruise_restart" in {event.event_id for event in a.event_records}
     with pytest.raises(ValueError, match="scenario"):
         run_full_flight_episode(7, settings=settings, object_id="vtol", scenario_id="F01-A")
+
+
+def test_explicit_turn_direction_controls_motion_and_is_recorded():
+    settings = load_settings()
+    right = run_full_flight_episode(
+        7, settings=settings, object_id="vtol", scenario_id="V01-B", direction=-1
+    )
+    left = run_full_flight_episode(
+        7, settings=settings, object_id="vtol", scenario_id="V01-B", direction=1
+    )
+    left_rate = left.diagnostic_arrays["track_turn_rate_rad_s"]
+    right_rate = right.diagnostic_arrays["track_turn_rate_rad_s"]
+    assert left_rate.max() > 0 and left_rate.min() >= -1e-12
+    assert right_rate.min() < 0 and right_rate.max() <= 1e-12
+    left_velocity = left.velocity_enu_mps[:, :2]
+    right_velocity = right.velocity_enu_mps[:, :2]
+    left_cross = (
+        left_velocity[:-1, 0] * left_velocity[1:, 1]
+        - left_velocity[:-1, 1] * left_velocity[1:, 0]
+    )
+    right_cross = (
+        right_velocity[:-1, 0] * right_velocity[1:, 1]
+        - right_velocity[:-1, 1] * right_velocity[1:, 0]
+    )
+    assert left_cross.max() > 0
+    assert right_cross.min() < 0
+    assert "turn_direction:left" in {event.event_id for event in left.event_records}
+    assert "turn_direction:right" in {event.event_id for event in right.event_records}
+    with pytest.raises(ValueError, match="direction"):
+        run_full_flight_episode(
+            7, settings=settings, object_id="vtol", scenario_id="V01-B", direction=0
+        )
+
+
+def test_implicit_direction_preserves_legacy_episode_identity():
+    episode = run_full_flight_episode(
+        7, settings=load_settings(), object_id="vtol", scenario_id="V01-B"
+    )
+    assert episode.episode_id == str(uuid5(NAMESPACE_URL, "full-flight-v1/vtol/V01-B/7"))
 
 
 def test_impossible_time_budget_rejected_without_silent_cap_increase():

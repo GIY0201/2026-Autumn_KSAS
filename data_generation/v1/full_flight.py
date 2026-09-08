@@ -223,7 +223,7 @@ def _compile(settings, obj, object_id, choice, rng_values, stretch):
     return f
 
 
-def run_full_flight_episode(seed, *, settings, object_id, scenario_id=None):
+def run_full_flight_episode(seed, *, settings, object_id, scenario_id=None, direction=None):
     """Generate one named flight or reject an infeasible configuration explicitly."""
     validate_settings(settings)
     if (
@@ -238,11 +238,16 @@ def run_full_flight_episode(seed, *, settings, object_id, scenario_id=None):
         scenario_id = str(rng.choice(list(entries)))
     if scenario_id not in entries:
         raise ValueError("unsupported scenario for selected object")
+    if direction is not None and direction not in {-1, 1}:
+        raise ValueError("direction must be -1 or 1")
     choice = entries[scenario_id]
+    heading = math.radians(rng.uniform(*settings["heading_range_deg"]))
+    sampled_direction = int(rng.choice([-1, 1]))
+    speed_scale = rng.uniform(*settings["speed_scale_range"])
     values = (
-        math.radians(rng.uniform(*settings["heading_range_deg"])),
-        rng.choice([-1, 1]),
-        rng.uniform(*settings["speed_scale_range"]),
+        heading,
+        sampled_direction if direction is None else direction,
+        speed_scale,
     )
     obj = settings["objects"][object_id]
     for attempt in range(settings["max_attempts"]):
@@ -287,8 +292,11 @@ def run_full_flight_episode(seed, *, settings, object_id, scenario_id=None):
         "acceleration_mps2",
         "jerk_mps3",
     )
+    identity = f"full-flight-v1/{object_id}/{scenario_id}/{seed}"
+    if direction is not None:
+        identity += f"/direction={values[1]}"
     return MotionEpisode(
-        str(uuid5(NAMESPACE_URL, f"full-flight-v1/{object_id}/{scenario_id}/{seed}")),
+        str(uuid5(NAMESPACE_URL, identity)),
         "complete",
         None,
         int(seed),
@@ -305,6 +313,23 @@ def run_full_flight_episode(seed, *, settings, object_id, scenario_id=None):
                 "scenario_selection",
                 True,
                 f"seed={seed}",
+            ),
+            *(
+                (
+                    MotionEvent(
+                        "turn_direction:" + ("left" if values[1] > 0 else "right"),
+                        0,
+                        0,
+                        "schedule_control",
+                        True,
+                        "explicit" if direction is not None else "seeded_random",
+                    ),
+                )
+                if any(
+                    choice[phase] in {"turn", "s_turn", "spiral", "orbit"}
+                    for phase in ("climb", "cruise", "descent")
+                )
+                else ()
             ),
             *f.events,
         ),

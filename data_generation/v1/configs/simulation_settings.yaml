@@ -1,0 +1,48 @@
+# Experimental interaction settings, not certified aircraft performance limits.
+schema: interactive-flight-v1
+evidence_status: experimental_kinematic_simulation
+full_flight_settings: full_flight_settings.yaml
+dt_s: 0.02
+output_dt_s: 0.2
+max_objects: 16
+heartbeat_timeout_s: 1.0
+history_display_samples: 300
+default_spacing_m: 100
+defaults:
+  mode: manual
+  start_mode: ground
+  seed: 17
+  sigma_m: 1
+  device: cpu
+  count: 1
+control:
+  keys: [KeyW, KeyS, KeyA, KeyD, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, KeyT]
+  power_rate_per_s: 0.15
+  hover_power: 0.5
+  ground_power: 0.0
+  attitude_response_s: 0.5
+  rotor_yaw_rate_rad_s: 0.6
+  rotor_pitch_display_rad: 0.2
+  rotor_roll_display_rad: 0.2
+  helicopter_takeoff_altitude_m: 80
+  transition_speed_tolerance_mps: 0.2
+  transition_timeout_factor: 3
+contact:
+  fixed_wing:
+    vertical_speed_max_mps: 2
+    horizontal_speed_max_mps: 35
+  helicopter:
+    vertical_speed_max_mps: 1.5
+    horizontal_speed_max_mps: 2
+  vtol:
+    vertical_speed_max_mps: 1.5
+    horizontal_speed_max_mps: 2
+display:
+  poll_ms: 50
+  heartbeat_ms: 100
+  chase_distance_m: 35
+  chase_height_m: 14
+  camera_response_s: 0.2
+  model_scale_m: 3
+  grid_size_m: 2000
+  max_png_bytes: 10000000

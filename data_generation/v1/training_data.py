@@ -18,18 +18,63 @@ from contracts.v1.validation import MAX_SAMPLE_COUNT, PUBLIC_OBSERVATION_COLUMNS
 
 INDEX_COLUMNS = ("sequence_id", "episode_id", "variant_id", "split", "start_step", "end_step")
 SPLITS = ("train", "validation", "test", "diagnostic")
+CORE_BEHAVIORS = (
+    "selected_climb_straight",
+    "selected_climb_turn",
+    "selected_climb_s_turn",
+    "selected_climb_spiral",
+    "cruise_straight",
+    "cruise_turn",
+    "cruise_s_turn",
+    "cruise_orbit",
+    "selected_descent_straight",
+    "selected_descent_turn",
+    "selected_descent_s_turn",
+    "selected_descent_spiral",
+)
+TURNING_BEHAVIORS = {item for item in CORE_BEHAVIORS if "straight" not in item}
+BALANCE_COLUMNS = (
+    "split",
+    "phase",
+    "behavior",
+    "direction",
+    "episode_count",
+    "left_episodes",
+    "right_episodes",
+    "duration_s",
+    "window_role",
+    "core_windows",
+    "left_windows",
+    "right_windows",
+    "target_points",
+)
 
 
 def validate_training_config(config: dict) -> None:
     """No hidden model context length or silent truncation of a training request."""
     expected = {"window_samples", "train_windows_per_episode", "evaluation_stride_samples"}
-    if set(config) not in (expected, expected | {"identity"}):
+    optional = {"identity", "behavior_balance"}
+    if not expected <= set(config) or not set(config) <= expected | optional:
         raise ValueError(f"training settings must contain exactly {sorted(expected)}")
     for key, value in config.items():
         if key == "identity":
             from .identity_training import validate_identity_config
 
             validate_identity_config(value)
+            continue
+        if key == "behavior_balance":
+            if set(value) != {
+                "schema",
+                "core_windows_per_behavior",
+                "transition_windows_per_boundary",
+            } or value["schema"] != "behavior-window-balance-v1":
+                raise ValueError("invalid behavior balance settings")
+            for number_key in ("core_windows_per_behavior", "transition_windows_per_boundary"):
+                number = value[number_key]
+                if isinstance(number, bool) or not isinstance(number, Integral) or number < 0:
+                    raise ValueError("invalid behavior balance window count")
+            if value["core_windows_per_behavior"] < 2 or value["core_windows_per_behavior"] % 2:
+                raise ValueError("core behavior window count must be a positive even integer")
             continue
         if key == "window_samples" and value is None:
             continue
@@ -106,12 +151,251 @@ def sequence_rows(episodes, config: dict, *, seed: int) -> list[dict]:
     return rows
 
 
+def _core_behavior(event_id: str) -> str | None:
+    for behavior in CORE_BEHAVIORS:
+        if event_id == behavior or event_id.startswith(behavior + "_"):
+            return behavior
+    return None
+
+
+def _phase(behavior: str) -> str:
+    if behavior.startswith("selected_climb_"):
+        return "climb"
+    if behavior.startswith("cruise_"):
+        return "cruise"
+    return "descent"
+
+
+def _record_intervals(record) -> tuple[str | None, list[tuple[str, float, float]]]:
+    direction = None
+    raw = []
+    for event in record.event_records:
+        if event.event_id == "turn_direction:left":
+            direction = "left"
+        elif event.event_id == "turn_direction:right":
+            direction = "right"
+        behavior = _core_behavior(event.event_id)
+        if behavior is not None and event.end_s > event.start_s:
+            raw.append((behavior, float(event.start_s), float(event.end_s)))
+    raw.sort(key=lambda item: item[1])
+    merged = []
+    for behavior, start, end in raw:
+        if merged and merged[-1][0] == behavior and abs(merged[-1][2] - start) <= 1e-8:
+            merged[-1] = (behavior, merged[-1][1], end)
+        else:
+            merged.append((behavior, start, end))
+    return direction, merged
+
+
+def _sample_candidates(candidates, count: int, *, seed: int, label: str):
+    if len(candidates) < count:
+        raise ValueError(f"insufficient balanced window candidates for {label}")
+    identity = int.from_bytes(hashlib.sha256(label.encode()).digest()[:4], "little")
+    rng = np.random.default_rng(np.random.SeedSequence([seed, identity]))
+    indices = sorted(rng.choice(len(candidates), count, replace=False).tolist())
+    return [candidates[index] for index in indices]
+
+
+def balanced_sequence_rows(episodes, motion_records, config: dict, *, seed: int):
+    """Select equal fully-contained core windows without exporting private labels."""
+    validate_training_config(config)
+    balance = config.get("behavior_balance")
+    if balance is None or config["window_samples"] != 91:
+        raise ValueError("balanced sequence generation requires explicit 91-sample settings")
+    metadata = {episode.episode_id: episode for episode in episodes}
+    records = {record.episode_id: record for record in motion_records}
+    if set(metadata) != set(records):
+        raise ValueError("balanced window records must exactly match Episode metadata")
+    candidates = Counter()
+    candidate_rows = {}
+    durations = Counter()
+    episode_ids = {}
+    direction_episode_ids = {}
+    corpus_stats = {}
+    transition_candidates = []
+    for episode_id, episode in metadata.items():
+        record = records[episode_id]
+        direction, intervals = _record_intervals(record)
+        for behavior, start_s, end_s in intervals:
+            corpus_key = (episode.split, behavior)
+            stats = corpus_stats.setdefault(
+                corpus_key,
+                {"duration_s": 0.0, "episodes": set(), "left": set(), "right": set()},
+            )
+            stats["duration_s"] += end_s - start_s
+            stats["episodes"].add(episode_id)
+            if behavior in TURNING_BEHAVIORS:
+                if direction not in {"left", "right"}:
+                    raise ValueError(f"turn direction is missing for {episode_id}")
+                stats[direction].add(episode_id)
+            if episode.split != "train":
+                continue
+            key = (behavior, direction if behavior in TURNING_BEHAVIORS else None)
+            durations[behavior] += end_s - start_s
+            episode_ids.setdefault(behavior, set()).add(episode_id)
+            if behavior in TURNING_BEHAVIORS:
+                direction_episode_ids.setdefault((behavior, direction), set()).add(episode_id)
+            first = int(np.ceil(start_s / episode.dt_s - 1e-9))
+            final_inside = int(np.ceil(end_s / episode.dt_s - 1e-9)) - 1
+            last = final_inside - 90
+            values = [(episode_id, start) for start in range(first, last + 1)]
+            candidates[key] += len(values)
+            candidate_rows.setdefault(key, []).extend(values)
+            for boundary_s in (start_s, end_s):
+                boundary_step = int(round(boundary_s / episode.dt_s))
+                if not 0 < boundary_step < episode.sample_count - 1:
+                    continue
+                transition_start = max(
+                    0, min(episode.sample_count - 91, boundary_step - 15)
+                )
+                transition_candidates.append((episode_id, transition_start, behavior))
+
+    quota = int(balance["core_windows_per_behavior"])
+    selected = []
+    audit = []
+    for behavior in CORE_BEHAVIORS:
+        if behavior in TURNING_BEHAVIORS:
+            left = _sample_candidates(
+                candidate_rows.get((behavior, "left"), []),
+                quota // 2,
+                seed=seed,
+                label=behavior + "/left",
+            )
+            right = _sample_candidates(
+                candidate_rows.get((behavior, "right"), []),
+                quota // 2,
+                seed=seed,
+                label=behavior + "/right",
+            )
+            chosen = left + right
+            left_count, right_count = len(left), len(right)
+            direction_label = "balanced_left_right"
+        else:
+            chosen = _sample_candidates(
+                candidate_rows.get((behavior, None), []), quota, seed=seed, label=behavior
+            )
+            left_count = right_count = 0
+            direction_label = "not_applicable"
+        selected.extend((episode_id, start, behavior) for episode_id, start in chosen)
+        audit.append(
+            {
+                "split": "train",
+                "phase": _phase(behavior),
+                "behavior": behavior,
+                "direction": direction_label,
+                "episode_count": len(episode_ids.get(behavior, set())),
+                "left_episodes": len(direction_episode_ids.get((behavior, "left"), set())),
+                "right_episodes": len(direction_episode_ids.get((behavior, "right"), set())),
+                "duration_s": float(durations[behavior]),
+                "window_role": "core",
+                "core_windows": len(chosen),
+                "left_windows": left_count,
+                "right_windows": right_count,
+                "target_points": len(chosen) * 75,
+            }
+        )
+    for split in ("validation", "test"):
+        if not any(episode.split == split for episode in metadata.values()):
+            continue
+        for behavior in CORE_BEHAVIORS:
+            stats = corpus_stats.get((split, behavior))
+            if stats is None:
+                raise ValueError(f"missing {split} behavior coverage: {behavior}")
+            audit.append(
+                {
+                    "split": split,
+                    "phase": _phase(behavior),
+                    "behavior": behavior,
+                    "direction": (
+                        "balanced_left_right"
+                        if behavior in TURNING_BEHAVIORS
+                        else "not_applicable"
+                    ),
+                    "episode_count": len(stats["episodes"]),
+                    "left_episodes": len(stats["left"]),
+                    "right_episodes": len(stats["right"]),
+                    "duration_s": float(stats["duration_s"]),
+                    "window_role": "corpus",
+                    "core_windows": 0,
+                    "left_windows": 0,
+                    "right_windows": 0,
+                    "target_points": 0,
+                }
+            )
+    transition_count = int(balance["transition_windows_per_boundary"])
+    transition_by_key = {}
+    for episode_id, start, behavior in dict.fromkeys(transition_candidates):
+        episode = metadata[episode_id]
+        for offset in range(transition_count):
+            shifted = min(episode.sample_count - 91, start + offset)
+            transition_by_key.setdefault((episode_id, shifted), behavior)
+    selected_keys = {(episode_id, start) for episode_id, start, _ in selected}
+    transition_selected = [
+        (episode_id, start, behavior)
+        for (episode_id, start), behavior in transition_by_key.items()
+        if (episode_id, start) not in selected_keys
+    ]
+    selected.extend(transition_selected)
+    if transition_count:
+        audit.append(
+            {
+                "split": "train",
+                "phase": "boundary",
+                "behavior": "core_behavior_boundary",
+                "direction": "mixed",
+                "episode_count": len({item[0] for item in transition_selected}),
+                "left_episodes": 0,
+                "right_episodes": 0,
+                "duration_s": 0.0,
+                "window_role": "transition",
+                "core_windows": len(transition_selected),
+                "left_windows": 0,
+                "right_windows": 0,
+                "target_points": len(transition_selected) * 75,
+            }
+        )
+    rows = []
+    for episode_id, start, _behavior in sorted(selected):
+        end = start + 90
+        for variant_id in VARIANT_SIGMAS:
+            identifier = hashlib.sha256(
+                f"{episode_id}/{variant_id}/{start}/{end}".encode()
+            ).hexdigest()
+            rows.append(
+                dict(
+                    sequence_id=identifier,
+                    episode_id=episode_id,
+                    variant_id=variant_id,
+                    split="train",
+                    start_step=start,
+                    end_step=end,
+                )
+            )
+    ordinary = sequence_rows(tuple(metadata.values()), config, seed=seed)
+    rows.extend(row for row in ordinary if row["split"] != "train")
+    expected_train = (12 * quota + len(transition_selected)) * 3
+    assert len([row for row in rows if row["split"] == "train"]) == expected_train
+    return rows, audit
+
+
 def write_sequence_index(
-    path: Path, episodes, config: dict, *, seed: int, object_type=None
+    path: Path,
+    episodes,
+    config: dict,
+    *,
+    seed: int,
+    object_type=None,
+    motion_records=None,
 ) -> None:
     """Publish indexes and human-readable split exports without evaluation inputs."""
     episodes = tuple(episodes)
-    rows = sequence_rows(episodes, config, seed=seed)
+    audit = None
+    if "behavior_balance" in config:
+        if motion_records is None:
+            raise ValueError("balanced window generation requires motion records")
+        rows, audit = balanced_sequence_rows(episodes, motion_records, config, seed=seed)
+    else:
+        rows = sequence_rows(episodes, config, seed=seed)
     directory = path / "training"
     directory.mkdir(exist_ok=False)
     OmegaConf.save(OmegaConf.create(config), directory / "settings.yaml")
@@ -119,6 +403,19 @@ def write_sequence_index(
         writer = csv.DictWriter(handle, fieldnames=INDEX_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)
+    if audit is not None:
+        with (directory / "balanced_windows.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as handle:
+            writer = csv.DictWriter(handle, fieldnames=INDEX_COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+        with (path / "evaluation" / "behavior_balance.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as handle:
+            writer = csv.DictWriter(handle, fieldnames=BALANCE_COLUMNS)
+            writer.writeheader()
+            writer.writerows(audit)
     counts = Counter(row["split"] for row in rows)
     parents = {
         split: {row["episode_id"] for row in rows if row["split"] == split} for split in SPLITS

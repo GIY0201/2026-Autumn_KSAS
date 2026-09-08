@@ -4,13 +4,19 @@ version = "0.1.0"
 description = "X8-based synthetic 3D trajectory generation and replay"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "accelerate>=1.0,<2",
     "dash>=3.0,<4",
+    "filelock>=3.20,<4",
     "hydra-core>=1.3,<2",
     "kaleido>=1.0,<2",
     "numpy>=2.0,<3",
     "omegaconf>=2.3,<3",
     "plotly>=6.0,<7",
+    "psutil>=7,<8",
     "scipy>=1.14,<2",
+    "tensorboard>=2.19,<3",
+    "torch>=2.6,<3",
+    "transformers>=4.50,<5",
 ]
 
 [dependency-groups]
@@ -27,7 +33,14 @@ testpaths = [
     "contracts/v1/tests",
     "data_generation/v1/tests",
     "visualization/v1/tests",
+    "models/gru/v1/tests",
+    "models/runtime/v1/tests",
 ]
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [tool.ruff]
 cache-dir = "temp/ruff-cache"
@@ -36,3 +49,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B"]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }

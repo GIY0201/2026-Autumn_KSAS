@@ -1,0 +1,28 @@
+plugin_id: gru_direct_v1
+model:
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.1
+  head_hidden_size: 256
+  huber_delta: 1.0
+  axis_loss_weights: [1.0, 1.0, 1.0]
+data:
+  dataset_path: ''
+  variant_id: sigma_1m
+  train_windows_per_episode: 64
+  evaluation_stride_samples: 75
+training:
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  batch_size: 64
+  max_epochs: 200
+  early_stopping_patience: 20
+  scheduler: cosine
+  warmup_ratio: 0.05
+  max_grad_norm: 1.0
+  seed: 17
+  precision: fp32
+  device: cuda:0
+  cudnn_enabled: false
+evaluation:
+  mode: test_after_training

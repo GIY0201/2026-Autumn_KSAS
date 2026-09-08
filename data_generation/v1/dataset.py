@@ -406,14 +406,35 @@ def make_observation_variants(
 
 
 def assign_episode_splits(
-    episode_ids: Iterable[str], *, master_seed: int, diagnostic: bool
+    episode_ids: Iterable[str],
+    *,
+    master_seed: int,
+    diagnostic: bool,
+    explicit: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Assign split labels once per truth episode; variants inherit that label."""
     identifiers = list(episode_ids)
     if len(set(identifiers)) != len(identifiers):
         raise ValueError("episode IDs must be unique for split assignment")
     if diagnostic:
+        if explicit is not None:
+            raise ValueError("diagnostic datasets cannot use explicit split assignments")
         return {episode_id: "diagnostic" for episode_id in identifiers}
+    if explicit is not None:
+        resolved = dict(explicit)
+        if set(resolved) != set(identifiers):
+            raise ValueError("explicit split IDs must exactly match Episode IDs")
+        if not set(resolved.values()) <= {"train", "validation", "test"}:
+            raise ValueError("explicit split label must be train, validation or test")
+        expected = {
+            "train": int(len(identifiers) * 0.70),
+            "validation": int(len(identifiers) * 0.15),
+        }
+        expected["test"] = len(identifiers) - expected["train"] - expected["validation"]
+        actual = {split: sum(value == split for value in resolved.values()) for split in expected}
+        if actual != expected:
+            raise ValueError(f"explicit split counts must follow 70/15/15: {expected}")
+        return {episode_id: resolved[episode_id] for episode_id in identifiers}
     generator = np.random.default_rng(np.random.SeedSequence([master_seed, 0, 99]))
     shuffled_indices = generator.permutation(len(identifiers))
     train_count = int(len(identifiers) * 0.70)
@@ -694,6 +715,7 @@ def write_dataset(
     output_root: Path,
     source_motion_check_report: MotionCheckReport | None = None,
     training_config: Mapping[str, object] | None = None,
+    episode_splits: Mapping[str, str] | None = None,
 ) -> DatasetWriteResult:
     """Write a new ID-addressed output folder; never replace an existing result."""
     _validate_generation_request(request)
@@ -748,6 +770,7 @@ def write_dataset(
             [episode.episode_id for episode in ordered_episodes],
             master_seed=request.master_seed,
             diagnostic=request.mode == "diagnostic",
+            explicit=episode_splits,
         )
         episodes_rows = [
             {
@@ -818,6 +841,7 @@ def write_dataset(
                 dict(training_config),
                 seed=request.master_seed,
                 object_type=request.object_id,
+                motion_records=ordered_episodes,
             )
         if source_motion_check_report is not None:
             _write_csv(
