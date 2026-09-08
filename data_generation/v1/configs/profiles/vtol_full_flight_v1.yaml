@@ -1,0 +1,21 @@
+engine: full_flight
+object_id: vtol
+model_id: vtol_full_flight_v1
+identity_label: "VTOL · 전체 이착륙 질점 시나리오"
+source_id: gazebo_reference_2026
+input_id: design:full-flight-v1:vtol
+evidence_status: EXPERIMENTAL_KINEMATIC_SCENARIO
+metadata:
+  motion_abstraction: point_mass_velocity_integration
+  source_role: reference_context_not_fitted_or_executed_gazebo_dynamics
+  parameter_role: experimental_generation_settings_not_aircraft_limits
+default_scenario_id: V01-A
+source_files:
+  - path: data_sources/gazebo_reference_2026/standard_vtol.sdf
+    sha256: a411db01615e3b7f78102fca270c2979198c709c4f07cd59a602a553c2bb4ad7
+    url: https://github.com/PX4/PX4-gazebo-models/blob/5577035667afb4b63fe1f966fb1a58bbb05d905b/models/standard_vtol/model.sdf
+limitations:
+  - Numeric settings are experimental, not a source-derived operating envelope.
+  - No Gazebo runtime, force-model fit, attitude, actuator, sensor or ground-contact dynamics.
+  - Infeasible scenarios are rejected; catalogs are not a claim that every combination fits 600 seconds.
+

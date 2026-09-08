@@ -133,7 +133,7 @@ def test_viewer_uses_human_readable_episode_and_visible_projection_names(
     yz_heading = _component_by_id(app.layout, "yz-view-heading")
 
     assert episode_select.options[0]["label"] == (
-        "X8 고정익 UAV · 진단 시뮬레이션 1 (ID: x8-00000019)"
+        "X8 고정익 UAV · 진단 시뮬레이션 1"
     )
     assert xy_heading.children == "XY 평면 · 수평 이동 (East–North)"
     assert xz_heading.children == "XZ 평면 · 고도 변화 (East–Up)"
@@ -190,8 +190,7 @@ def test_playback_updates_marker_stream_without_rebuilding_all_figures(tmp_path:
     app = create_app(_dataset_path(tmp_path), output_root=tmp_path / "exports")
 
     static_figure_inputs = _callback_input_ids(app, "figure-xy.figure")
-    marker_stream_inputs = _callback_input_ids(app, "figure-xy.extendData")
 
     assert app.config.update_title is None
-    assert "player-state" not in static_figure_inputs
-    assert "player-state" in marker_stream_inputs
+    assert "player-state" in static_figure_inputs
+    assert not any("extendData" in key for key in app.callback_map)

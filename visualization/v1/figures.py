@@ -6,7 +6,7 @@ import csv
 import hashlib
 import platform
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,7 +16,14 @@ import plotly.graph_objects as go
 
 from contracts.v1.csv_io import read_evaluation_truth, read_public_dataset
 from contracts.v1.types import PublicDataset
-from contracts.v1.validation import OUTPUT_DT_S, SAMPLE_COUNT, VARIANT_SIGMAS, ContractError
+from contracts.v1.validation import (
+    MAX_SAMPLE_COUNT,
+    MIN_SAMPLE_COUNT,
+    OUTPUT_DT_S,
+    SAMPLE_COUNT,
+    VARIANT_SIGMAS,
+    ContractError,
+)
 
 _VIEW_AXES = {
     "xy": (0, 1, "East x (m)", "North y (m)"),
@@ -55,7 +62,6 @@ _SPLIT_NAMES = {
     "diagnostic": "진단",
 }
 
-assert SAMPLE_COUNT == 301
 assert OUTPUT_DT_S == 0.2
 
 
@@ -67,6 +73,16 @@ class ViewerDataset:
     public: PublicDataset
     _observations: dict[tuple[str, str], np.ndarray]
     _truth: dict[str, np.ndarray]
+    _kinematics: dict[str, np.ndarray] = field(default_factory=dict)
+
+    def kinematics(self, episode_id: str, step: int) -> np.ndarray:
+        """Return saved ENU velocity/acceleration, never differentiated observations."""
+        if episode_id not in self._kinematics:
+            raise ContractError(f"kinematics unavailable for episode: {episode_id}")
+        values = self._kinematics[episode_id]
+        if isinstance(step, bool) or not isinstance(step, int) or not 0 <= step < len(values):
+            raise ValueError("kinematics step is outside the stored timeline")
+        return values[step].copy()
 
     @property
     def episode_ids(self) -> tuple[str, ...]:
@@ -77,6 +93,15 @@ class ViewerDataset:
     def has_truth(self) -> bool:
         """Whether this viewer instance was deliberately granted truth access."""
         return bool(self._truth)
+
+    def sample_count(self, episode_ids: tuple[str, ...] | list[str]) -> int:
+        """Return the shared stored timeline; never repeat shorter episode endpoints."""
+        counts = {episode.episode_id: episode.sample_count for episode in self.public.episodes}
+        if not episode_ids or any(item not in counts for item in episode_ids):
+            raise ValueError("select known episode IDs for playback")
+        count = min(counts[item] for item in episode_ids)
+        assert MIN_SAMPLE_COUNT <= count <= MAX_SAMPLE_COUNT
+        return count
 
     def episode_display_name(self, episode_id: str) -> str:
         """Return a human-readable, public-metadata-only episode name."""
@@ -92,8 +117,8 @@ class ViewerDataset:
         raise ContractError(f"unknown episode ID: {episode_id}")
 
     def episode_option_label(self, episode_id: str) -> str:
-        """Keep the stable ID visible without making it the primary episode name."""
-        return f"{self.episode_display_name(episode_id)} (ID: {episode_id})"
+        """Use readable labels; stable IDs remain the selection values and tooltips."""
+        return self.episode_display_name(episode_id)
 
     def observed(self, episode_id: str, variant_id: str) -> np.ndarray:
         """Return the stored XYZ observations without interpolating or resampling."""
@@ -128,16 +153,20 @@ class ExportSetResult:
     png_paths: dict[str, Path]
 
 
-def _to_positions(records, value_names: tuple[str, str, str]) -> dict[tuple[str, str], np.ndarray]:
+def _to_positions(
+    public: PublicDataset, value_names: tuple[str, str, str]
+) -> dict[tuple[str, str], np.ndarray]:
     """Index public observations into exact stored steps."""
     indexed: dict[tuple[str, str], np.ndarray] = {}
     grouped: dict[tuple[str, str], list] = {}
-    for record in records:
+    counts = {episode.episode_id: episode.sample_count for episode in public.episodes}
+    for record in public.observations:
         grouped.setdefault((record.episode_id, record.variant_id), []).append(record)
     for key, sequence in grouped.items():
         sequence.sort(key=lambda record: record.step)
-        if [record.step for record in sequence] != list(range(SAMPLE_COUNT)):
-            raise ContractError(f"viewer requires stored steps 0 through {SAMPLE_COUNT - 1}: {key}")
+        count = counts[key[0]]
+        if [record.step for record in sequence] != list(range(count)):
+            raise ContractError(f"viewer requires stored steps 0 through {count - 1}: {key}")
         indexed[key] = np.asarray(
             [[getattr(record, field) for field in value_names] for record in sequence], dtype=float
         )
@@ -152,18 +181,32 @@ def _load_truth(dataset_path: Path, public: PublicDataset) -> dict[str, np.ndarr
         grouped.setdefault(record.episode_id, []).append(record)
 
     truth: dict[str, np.ndarray] = {}
-    for episode_id in public.episode_ids:
+    for metadata in public.episodes:
+        episode_id = metadata.episode_id
+        count = metadata.sample_count
         sequence = sorted(grouped.get(episode_id, []), key=lambda record: record.step)
-        if len(sequence) != SAMPLE_COUNT or [record.step for record in sequence] != list(
-            range(SAMPLE_COUNT)
-        ):
-            raise ContractError(f"truth must provide {SAMPLE_COUNT} stored steps for {episode_id}")
-        expected_times = np.arange(SAMPLE_COUNT, dtype=float) * OUTPUT_DT_S
+        if len(sequence) != count or [record.step for record in sequence] != list(range(count)):
+            raise ContractError(f"truth must provide {count} stored steps for {episode_id}")
+        expected_times = np.arange(count, dtype=float) * metadata.dt_s
         actual_times = np.asarray([record.t_s for record in sequence], dtype=float)
         if not np.allclose(actual_times, expected_times, rtol=0.0, atol=1e-12):
             raise ContractError(f"truth timeline is not the v1 0.2-second grid for {episode_id}")
         truth[episode_id] = np.asarray(
-            [[record.x_m, record.y_m, record.z_m] for record in sequence], dtype=float
+            [
+                [
+                    record.x_m,
+                    record.y_m,
+                    record.z_m,
+                    record.vx_mps,
+                    record.vy_mps,
+                    record.vz_mps,
+                    record.ax_mps2,
+                    record.ay_mps2,
+                    record.az_mps2,
+                ]
+                for record in sequence
+            ],
+            dtype=float,
         )
     return truth
 
@@ -172,13 +215,14 @@ def load_viewer_dataset(dataset_path: Path, *, public_only: bool = False) -> Vie
     """Load one explicitly selected dataset; never infer a latest output directory."""
     resolved_path = Path(dataset_path).resolve()
     public = read_public_dataset(resolved_path / "public")
-    observations = _to_positions(public.observations, ("x_m", "y_m", "z_m"))
+    observations = _to_positions(public, ("x_m", "y_m", "z_m"))
     truth = {} if public_only else _load_truth(resolved_path, public)
     return ViewerDataset(
         source_path=resolved_path,
         public=public,
         _observations=observations,
-        _truth=truth,
+        _truth={key: values[:, :3] for key, values in truth.items()},
+        _kinematics={key: values[:, 3:] for key, values in truth.items()},
     )
 
 
@@ -202,8 +246,9 @@ def _validate_selection(
         raise ValueError(f"unknown episode IDs: {sorted(unknown)}")
     if variant_id not in VARIANT_SIGMAS:
         raise ValueError(f"unsupported observation variant: {variant_id}")
-    if isinstance(step, bool) or not isinstance(step, int) or not 0 <= step < SAMPLE_COUNT:
-        raise ValueError(f"step must be an integer from 0 to {SAMPLE_COUNT - 1}")
+    count = dataset.sample_count(selected)
+    if isinstance(step, bool) or not isinstance(step, int) or not 0 <= step < count:
+        raise ValueError(f"step must be an integer from 0 to {count - 1}")
     return selected
 
 
@@ -227,8 +272,8 @@ def _base_layout(title: str) -> dict:
         "margin": {"l": 58, "r": 24, "t": 48, "b": 52},
         "legend": {
             "orientation": "h",
-            "yanchor": "bottom",
-            "y": 1.02,
+            "yanchor": "top",
+            "y": -0.18,
             "xanchor": "left",
             "x": 0,
             "font": {"size": 10},
@@ -322,8 +367,10 @@ def build_projection_figure(
                 }
             else:
                 is_observation = trace_slot == _OBSERVATION_LINE
-                line_width = (3 if is_observation else 5) if view == "3d" else (
-                    1.8 if is_observation else 2.4
+                line_width = (
+                    (3 if is_observation else 5)
+                    if view == "3d"
+                    else (1.8 if is_observation else 2.4)
                 )
                 trace_kwargs["line"] = {
                     "color": color,
@@ -346,11 +393,7 @@ def build_projection_figure(
                 first_axis, second_axis, _, _ = _VIEW_AXES[view]
                 figure.add_trace(
                     go.Scatter(
-                        x=(
-                            values[:, first_axis].tolist()
-                            if is_current
-                            else values[:, first_axis]
-                        ),
+                        x=(values[:, first_axis].tolist() if is_current else values[:, first_axis]),
                         y=(
                             values[:, second_axis].tolist()
                             if is_current
@@ -441,14 +484,21 @@ def advance_player(
     *,
     trigger: str,
     requested_step: int | None = None,
+    sample_count: int = SAMPLE_COUNT,
 ) -> dict[str, int | bool]:
     """Advance a player only along the stored integer sample index grid."""
     current_step = state.get("step")
+    if (
+        isinstance(sample_count, bool)
+        or not isinstance(sample_count, int)
+        or not MIN_SAMPLE_COUNT <= sample_count <= MAX_SAMPLE_COUNT
+    ):
+        raise ValueError("sample_count must be a supported stored timeline length")
     playing = state.get("playing")
     if (
         isinstance(current_step, bool)
         or not isinstance(current_step, int)
-        or not 0 <= current_step < SAMPLE_COUNT
+        or not 0 <= current_step < sample_count
     ):
         raise ValueError("player state step must be a stored v1 sample index")
     if not isinstance(playing, bool):
@@ -457,18 +507,18 @@ def advance_player(
     if trigger == "seek":
         if isinstance(requested_step, bool) or not isinstance(requested_step, int):
             raise ValueError("seek requires an integer stored step")
-        if not 0 <= requested_step < SAMPLE_COUNT:
-            raise ValueError(f"seek step must be from 0 to {SAMPLE_COUNT - 1}")
+        if not 0 <= requested_step < sample_count:
+            raise ValueError(f"seek step must be from 0 to {sample_count - 1}")
         return {"step": requested_step, "playing": playing}
     if trigger == "play":
-        return {"step": current_step, "playing": current_step < SAMPLE_COUNT - 1}
+        return {"step": current_step, "playing": current_step < sample_count - 1}
     if trigger == "pause":
         return {"step": current_step, "playing": False}
     if trigger == "tick":
-        if not playing or current_step == SAMPLE_COUNT - 1:
+        if not playing or current_step == sample_count - 1:
             return {"step": current_step, "playing": False}
         next_step = current_step + 1
-        return {"step": next_step, "playing": next_step < SAMPLE_COUNT - 1}
+        return {"step": next_step, "playing": next_step < sample_count - 1}
     raise ValueError(f"unsupported player trigger: {trigger}")
 
 
@@ -507,8 +557,9 @@ def export_png(
         raise ValueError("PNG export requires one to four distinct episode IDs")
     if variant_id not in VARIANT_SIGMAS:
         raise ValueError(f"unsupported observation variant: {variant_id}")
-    if isinstance(step, bool) or not isinstance(step, int) or not 0 <= step < SAMPLE_COUNT:
-        raise ValueError(f"step must be from 0 to {SAMPLE_COUNT - 1}")
+    _validate_selection(
+        load_viewer_dataset(dataset_path, public_only=True), view, episode_ids, variant_id, step
+    )
 
     input_path = Path(dataset_path).resolve()
     run_path = Path(output_root).resolve() / "visualization" / "v1" / str(uuid4())
@@ -607,8 +658,9 @@ def export_png_set(
         raise ValueError("four-view export requires one to four distinct episode IDs")
     if variant_id not in VARIANT_SIGMAS:
         raise ValueError(f"unsupported observation variant: {variant_id}")
-    if isinstance(step, bool) or not isinstance(step, int) or not 0 <= step < SAMPLE_COUNT:
-        raise ValueError(f"step must be from 0 to {SAMPLE_COUNT - 1}")
+    _validate_selection(
+        load_viewer_dataset(dataset_path, public_only=True), "xy", episode_ids, variant_id, step
+    )
 
     input_path = Path(dataset_path).resolve()
     run_path = Path(output_root).resolve() / "visualization" / "v1" / str(uuid4())

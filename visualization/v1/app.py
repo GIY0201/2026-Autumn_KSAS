@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
+from dash import Dash, Input, Output, Patch, State, ctx, dcc, html, no_update
 
 from contracts.v1.validation import OUTPUT_DT_S, SAMPLE_COUNT, VARIANT_SIGMAS
 from data_generation.v1.service import GenerationService
@@ -19,6 +19,7 @@ from .figures import (
     load_viewer_dataset,
 )
 from .generation_ui import DatasetRegistry, generation_panel, register_generation_callbacks
+from .telemetry import telemetry_content, telemetry_panel
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _VIEW_IDS = ("xy", "xz", "yz", "3d")
@@ -27,7 +28,6 @@ _MAX_COMPARED_EPISODES = 4
 _DEFAULT_PLAYER_STATE = {"step": 0, "playing": False}
 _GRAPH_CANVAS_HEIGHT = "clamp(22rem, 36vw, 34rem)"
 
-assert SAMPLE_COUNT == 301
 assert OUTPUT_DT_S == 0.2
 assert _SPEEDS == tuple(sorted(_SPEEDS))
 
@@ -64,22 +64,43 @@ def _episode_availability_message(episode_count: int) -> str:
     )
 
 
-def _normalize_step(value: Any, fallback: int) -> int:
+def _normalize_step(value: Any, fallback: int, sample_count: int = SAMPLE_COUNT) -> int:
     """Accept only a stored integer sample index from Dash component state."""
     if isinstance(value, bool):
         return fallback
-    if isinstance(value, int) and 0 <= value < SAMPLE_COUNT:
+    if isinstance(value, int) and 0 <= value < sample_count:
         return value
-    if isinstance(value, float) and value.is_integer() and 0 <= int(value) < SAMPLE_COUNT:
+    if isinstance(value, float) and value.is_integer() and 0 <= int(value) < sample_count:
         return int(value)
     return fallback
 
 
-def _player_status(state: dict[str, int | bool]) -> str:
+def _player_status(state: dict[str, int | bool], sample_count: int = SAMPLE_COUNT) -> str:
     """Describe current stored time and playback state without implying interpolation."""
     step = int(state["step"])
     phase = "Playing" if state["playing"] else "Paused"
-    return f"{phase}. Stored step {step} of {SAMPLE_COUNT - 1}; t = {step * OUTPUT_DT_S:.1f} s."
+    return f"{phase}. Stored step {step} of {sample_count - 1}; t = {step * OUTPUT_DT_S:.1f} s."
+
+
+def _slider_marks(sample_count: int) -> dict[int, str]:
+    """Use stored indices, including both endpoints, for timeline labels."""
+    end = sample_count - 1
+    return {
+        step: f"{step * OUTPUT_DT_S:g} s"
+        for step in sorted({round(end * fraction / 4) for fraction in range(5)})
+    }
+
+
+def _timeline_warning(dataset: ViewerDataset, selected: tuple[str, ...]) -> str:
+    counts = {
+        episode.sample_count
+        for episode in dataset.public.episodes
+        if episode.episode_id in selected
+    }
+    if len(counts) > 1:
+        duration = (min(counts) - 1) * OUTPUT_DT_S
+        return f" Episode 길이가 달라 공통 구간 0–{duration:g} s까지만 재생합니다."
+    return ""
 
 
 def _build_figures(
@@ -90,7 +111,7 @@ def _build_figures(
     show_truth: bool,
 ) -> tuple:
     """Build all panels from one exact selection and one shared integer time step."""
-    step = int(state["step"])
+    step = _normalize_step(state["step"], 0, dataset.sample_count(selected))
     return tuple(
         build_projection_figure(
             dataset,
@@ -104,7 +125,7 @@ def _build_figures(
     )
 
 
-def _graph_section(figure_id: str, heading_id: str, title: str) -> html.Section:
+def _graph_section(figure_id: str, heading_id: str, title: str, figure) -> html.Section:
     """Give each Plotly canvas a visible, semantic projection heading."""
     graph_config = {
         "displaylogo": False,
@@ -116,6 +137,7 @@ def _graph_section(figure_id: str, heading_id: str, title: str) -> html.Section:
             html.H3(title, id=heading_id, className="figure-heading"),
             dcc.Graph(
                 id=figure_id,
+                figure=figure,
                 config=graph_config,
                 style={"height": _GRAPH_CANVAS_HEIGHT},
             ),
@@ -128,10 +150,31 @@ def _graph_section(figure_id: str, heading_id: str, title: str) -> html.Section:
 def _viewer_layout(dataset: ViewerDataset) -> html.Div:
     """Create a semantic, keyboard-operable local research viewer layout."""
     episode_count = len(dataset.episode_ids)
+    initial_figures = dict(
+        zip(
+            _VIEW_IDS,
+            _build_figures(
+                dataset,
+                dataset.episode_ids[:1],
+                "sigma_3m",
+                _DEFAULT_PLAYER_STATE,
+                dataset.has_truth,
+            ),
+            strict=True,
+        )
+    )
+    sample_count = dataset.sample_count(dataset.episode_ids[:1])
+    durations = [episode.duration_s for episode in dataset.public.episodes]
+    duration_label = (
+        f"{durations[0]:g}"
+        if min(durations) == max(durations)
+        else f"{min(durations):g}–{max(durations):g}"
+    )
     episode_options = [
         {
             "label": dataset.episode_option_label(episode.episode_id),
             "value": episode.episode_id,
+            "title": f"ID: {episode.episode_id}",
         }
         for episode in dataset.public.episodes
     ]
@@ -155,6 +198,8 @@ def _viewer_layout(dataset: ViewerDataset) -> html.Div:
     return html.Div(
         [
             dcc.Store(id="dataset-key", data=dataset.source_path.name),
+            dcc.Store(id="render-context", data=None),
+            dcc.Store(id="camera-interacting", data=False),
             html.A("Skip to trajectory viewer", href="#viewer-main", className="skip-link"),
             html.Header(
                 [
@@ -164,7 +209,10 @@ def _viewer_layout(dataset: ViewerDataset) -> html.Div:
                         [
                             html.Span("Dataset ", className="muted-label"),
                             html.Code(dataset.source_path.name),
-                            html.Span(" · 60 s · 5 Hz · stored samples only"),
+                            html.Span(
+                                f" · {duration_label} s · {1 / OUTPUT_DT_S:g} Hz"
+                                " · stored samples only"
+                            ),
                         ],
                         className="subtitle",
                     ),
@@ -193,6 +241,8 @@ def _viewer_layout(dataset: ViewerDataset) -> html.Div:
                                                 clearable=False,
                                                 disabled=episode_count == 1,
                                                 className="episode-select",
+                                                optionHeight=64,
+                                                maxHeight=320,
                                             ),
                                             html.P(
                                                 _episode_availability_message(episode_count),
@@ -274,16 +324,10 @@ def _viewer_layout(dataset: ViewerDataset) -> html.Div:
                                             dcc.Slider(
                                                 id="step-slider",
                                                 min=0,
-                                                max=SAMPLE_COUNT - 1,
+                                                max=sample_count - 1,
                                                 step=1,
                                                 value=0,
-                                                marks={
-                                                    0: "0 s",
-                                                    75: "15 s",
-                                                    150: "30 s",
-                                                    225: "45 s",
-                                                    300: "60 s",
-                                                },
+                                                marks=_slider_marks(sample_count),
                                                 tooltip={
                                                     "placement": "bottom",
                                                     "always_visible": False,
@@ -294,7 +338,7 @@ def _viewer_layout(dataset: ViewerDataset) -> html.Div:
                                         **{"aria-labelledby": "time-step-label"},
                                     ),
                                     html.Div(
-                                        _player_status(_DEFAULT_PLAYER_STATE),
+                                        _player_status(_DEFAULT_PLAYER_STATE, sample_count),
                                         id="playback-status",
                                         className="control-note",
                                         **{"aria-live": "polite"},
@@ -332,25 +376,32 @@ def _viewer_layout(dataset: ViewerDataset) -> html.Div:
                     html.Section(
                         [
                             html.H2("Synchronized ENU views", className="visually-hidden"),
+                            telemetry_panel(dataset),
                             html.Div(
                                 [
                                     _graph_section(
                                         "figure-xy",
                                         "xy-view-heading",
                                         "XY 평면 · 수평 이동 (East–North)",
+                                        initial_figures["xy"],
                                     ),
                                     _graph_section(
                                         "figure-xz",
                                         "xz-view-heading",
                                         "XZ 평면 · 고도 변화 (East–Up)",
+                                        initial_figures["xz"],
                                     ),
                                     _graph_section(
                                         "figure-yz",
                                         "yz-view-heading",
                                         "YZ 평면 · 측면 이동 (North–Up)",
+                                        initial_figures["yz"],
                                     ),
                                     _graph_section(
-                                        "figure-3d", "three-d-view-heading", "3D ENU 공간"
+                                        "figure-3d",
+                                        "three-d-view-heading",
+                                        "3D ENU 공간",
+                                        initial_figures["3d"],
                                     ),
                                 ],
                                 className="figure-grid",
@@ -388,6 +439,7 @@ def create_app(
     )
     jobs = generation_service or GenerationService(output_root=_PROJECT_ROOT / "outputs")
     registry = DatasetRegistry(dataset, public_only=public_only)
+    registry.discover_saved(jobs.output_root)
     app.server.extensions["generation_service"] = jobs
     app.layout = html.Div(
         [
@@ -401,6 +453,20 @@ def create_app(
         ]
     )
     register_generation_callbacks(app, jobs, registry)
+
+    @app.callback(
+        Output("telemetry-content", "children"),
+        Input("player-state", "data"),
+        Input("episode-select", "value"),
+        Input("dataset-key", "data"),
+    )
+    def render_telemetry(state, requested_ids, dataset_key):
+        active = registry.get(dataset_key)
+        selected, _ = _selected_episode_ids(requested_ids, active)
+        step = _normalize_step(
+            (state or _DEFAULT_PLAYER_STATE).get("step"), 0, active.sample_count(selected)
+        )
+        return telemetry_content(active, selected, step)
 
     @app.callback(
         Output("viewer-container", "children"),
@@ -420,9 +486,13 @@ def create_app(
         Output("play-toggle", "children"),
         Output("play-toggle", "aria-label"),
         Output("playback-status", "children"),
+        Output("step-slider", "max"),
+        Output("step-slider", "marks"),
         Input("play-toggle", "n_clicks"),
         Input("step-slider", "value"),
         Input("playback-tick", "n_intervals"),
+        Input("episode-select", "value"),
+        Input("dataset-key", "data"),
         State("player-state", "data"),
         prevent_initial_call=True,
     )
@@ -430,22 +500,32 @@ def create_app(
         _clicks: int | None,
         requested_step: Any,
         _ticks: int,
+        requested_ids: Any,
+        dataset_key: str,
         state: dict[str, int | bool] | None,
-    ) -> tuple[dict[str, int | bool], int, str, str, str]:
+    ) -> tuple:
         """Advance the player through exact steps, including slider synchronization."""
         current = state or _DEFAULT_PLAYER_STATE
+        active_dataset = registry.get(dataset_key)
+        selected, _ = _selected_episode_ids(requested_ids, active_dataset)
+        count = active_dataset.sample_count(selected)
+        if _normalize_step(current.get("step"), -1, count) == -1:
+            current = dict(_DEFAULT_PLAYER_STATE)
         trigger = ctx.triggered_id
-        if trigger == "play-toggle":
+        if trigger in {"episode-select", "dataset-key"}:
+            next_state = dict(_DEFAULT_PLAYER_STATE)
+        elif trigger == "play-toggle":
             action = "pause" if current.get("playing") else "play"
-            next_state = advance_player(current, trigger=action)
+            next_state = advance_player(current, trigger=action, sample_count=count)
         elif trigger == "step-slider":
             next_state = advance_player(
                 current,
                 trigger="seek",
-                requested_step=_normalize_step(requested_step, int(current["step"])),
+                requested_step=_normalize_step(requested_step, int(current["step"]), count),
+                sample_count=count,
             )
         elif trigger == "playback-tick":
-            next_state = advance_player(current, trigger="tick")
+            next_state = advance_player(current, trigger="tick", sample_count=count)
         else:
             next_state = {"step": int(current["step"]), "playing": bool(current["playing"])}
         button_label = "Pause" if next_state["playing"] else "Play"
@@ -457,7 +537,9 @@ def create_app(
             int(next_state["step"]),
             button_label,
             button_aria,
-            _player_status(next_state),
+            _player_status(next_state, count) + _timeline_warning(active_dataset, selected),
+            count - 1,
+            _slider_marks(count),
         )
 
     @app.callback(
@@ -473,151 +555,61 @@ def create_app(
         assert interval_ms > 0
         return interval_ms, not bool(state.get("playing"))
 
-    def render_figures(
-        requested_ids: Any,
-        variant_id: str,
-        state: dict[str, int | bool],
-        show_truth: bool,
-        dataset_key: str,
-    ) -> tuple:
-        """Render every panel from a shared, validated viewer state."""
-        dataset = registry.get(dataset_key)
-        selected, warning = _selected_episode_ids(requested_ids, dataset)
-        normalized_variant = variant_id if variant_id in VARIANT_SIGMAS else "sigma_3m"
-        normalized_state = state or _DEFAULT_PLAYER_STATE
-        figures = _build_figures(
-            dataset, selected, normalized_variant, normalized_state, show_truth
-        )
-        return (*figures, warning)
-
+    render_inputs = [
+        Input("episode-select", "value"),
+        Input("variant-select", "value"),
+        Input("player-state", "data"),
+        Input("dataset-key", "data"),
+        Input("camera-interacting", "data"),
+    ]
     if dataset.has_truth:
+        render_inputs.append(Input("truth-toggle", "value"))
 
-        @app.callback(
-            Output("figure-xy", "figure"),
-            Output("figure-xz", "figure"),
-            Output("figure-yz", "figure"),
-            Output("figure-3d", "figure"),
-            Output("selection-warning", "children"),
-            Input("episode-select", "value"),
-            Input("variant-select", "value"),
-            Input("truth-toggle", "value"),
-            State("player-state", "data"),
-            State("dataset-key", "data"),
+    @app.callback(
+        Output("figure-xy", "figure"),
+        Output("figure-xz", "figure"),
+        Output("figure-yz", "figure"),
+        Output("figure-3d", "figure"),
+        Output("selection-warning", "children"),
+        Output("render-context", "data"),
+        *render_inputs,
+        State("render-context", "data"),
+    )
+    def render_figures(requested_ids, variant_id, state, dataset_key, camera_interacting, *extra):
+        """One writer owns initialization, selection changes and marker patches."""
+        active = registry.get(dataset_key)
+        selected, warning = _selected_episode_ids(requested_ids, active)
+        variant = variant_id if variant_id in VARIANT_SIGMAS else "sigma_3m"
+        show_truth = bool(dataset.has_truth and extra[0] and "show" in extra[0])
+        previous = extra[-1]
+        context = dict(
+            dataset=dataset_key, episodes=list(selected), variant=variant, truth=show_truth
         )
-        def render_evaluation_figures(
-            requested_ids: Any,
-            variant_id: str,
-            truth_toggle: list[str] | None,
-            state: dict[str, int | bool],
-            dataset_key: str,
-        ) -> tuple:
-            return render_figures(
-                requested_ids,
-                variant_id,
-                state,
-                show_truth=bool(truth_toggle and "show" in truth_toggle),
-                dataset_key=dataset_key,
+        current = state or _DEFAULT_PLAYER_STATE
+        step = _normalize_step(current.get("step"), 0, active.sample_count(selected))
+        if ctx.triggered_id in {"player-state", "camera-interacting"} and previous == context:
+            updates = build_current_marker_extensions(
+                active,
+                episode_ids=selected,
+                variant_id=variant,
+                step=step,
+                show_truth=show_truth,
             )
-
-    else:
-
-        @app.callback(
-            Output("figure-xy", "figure"),
-            Output("figure-xz", "figure"),
-            Output("figure-yz", "figure"),
-            Output("figure-3d", "figure"),
-            Output("selection-warning", "children"),
-            Input("episode-select", "value"),
-            Input("variant-select", "value"),
-            State("player-state", "data"),
-            State("dataset-key", "data"),
-        )
-        def render_public_figures(
-            requested_ids: Any,
-            variant_id: str,
-            state: dict[str, int | bool],
-            dataset_key: str,
-        ) -> tuple:
-            return render_figures(
-                requested_ids, variant_id, state, show_truth=False, dataset_key=dataset_key
+            figures = []
+            for view in _VIEW_IDS:
+                values, indices, _ = updates[view]
+                patch = Patch()
+                for coordinate, sequences in values.items():
+                    for index, sequence in zip(indices, sequences, strict=True):
+                        patch["data"][index][coordinate] = sequence
+                figures.append(patch)
+            if camera_interacting:
+                figures[_VIEW_IDS.index("3d")] = no_update
+        else:
+            figures = _build_figures(
+                active, selected, variant, {"step": step, "playing": False}, show_truth
             )
-
-    def stream_current_markers(
-        state: dict[str, int | bool] | None,
-        requested_ids: Any,
-        variant_id: str,
-        show_truth: bool,
-        dataset_key: str,
-    ) -> tuple:
-        """Send only the current marker coordinates for a stored playback step."""
-        dataset = registry.get(dataset_key)
-        selected, _ = _selected_episode_ids(requested_ids, dataset)
-        normalized_variant = variant_id if variant_id in VARIANT_SIGMAS else "sigma_3m"
-        normalized_state = state or _DEFAULT_PLAYER_STATE
-        extensions = build_current_marker_extensions(
-            dataset,
-            episode_ids=selected,
-            variant_id=normalized_variant,
-            step=_normalize_step(normalized_state.get("step"), 0),
-            show_truth=show_truth,
-        )
-        return tuple(extensions[view] for view in _VIEW_IDS)
-
-    if dataset.has_truth:
-
-        @app.callback(
-            Output("figure-xy", "extendData"),
-            Output("figure-xz", "extendData"),
-            Output("figure-yz", "extendData"),
-            Output("figure-3d", "extendData"),
-            Input("player-state", "data"),
-            State("episode-select", "value"),
-            State("variant-select", "value"),
-            State("truth-toggle", "value"),
-            State("dataset-key", "data"),
-            prevent_initial_call=True,
-        )
-        def stream_evaluation_markers(
-            state: dict[str, int | bool] | None,
-            requested_ids: Any,
-            variant_id: str,
-            truth_toggle: list[str] | None,
-            dataset_key: str,
-        ) -> tuple:
-            return stream_current_markers(
-                state,
-                requested_ids,
-                variant_id,
-                show_truth=bool(truth_toggle and "show" in truth_toggle),
-                dataset_key=dataset_key,
-            )
-
-    else:
-
-        @app.callback(
-            Output("figure-xy", "extendData"),
-            Output("figure-xz", "extendData"),
-            Output("figure-yz", "extendData"),
-            Output("figure-3d", "extendData"),
-            Input("player-state", "data"),
-            State("episode-select", "value"),
-            State("variant-select", "value"),
-            State("dataset-key", "data"),
-            prevent_initial_call=True,
-        )
-        def stream_public_markers(
-            state: dict[str, int | bool] | None,
-            requested_ids: Any,
-            variant_id: str,
-            dataset_key: str,
-        ) -> tuple:
-            return stream_current_markers(
-                state,
-                requested_ids,
-                variant_id,
-                show_truth=False,
-                dataset_key=dataset_key,
-            )
+        return (*figures, warning + _timeline_warning(active, selected), context)
 
     def export_figures(
         _clicks: int,
@@ -631,7 +623,10 @@ def create_app(
         dataset = registry.get(dataset_key)
         selected, warning = _selected_episode_ids(requested_ids, dataset)
         normalized_variant = variant_id if variant_id in VARIANT_SIGMAS else "sigma_3m"
-        normalized_state = state or {"step": 0, "playing": False}
+        normalized_state = dict(state or _DEFAULT_PLAYER_STATE)
+        normalized_state["step"] = _normalize_step(
+            normalized_state.get("step"), 0, dataset.sample_count(selected)
+        )
         figures = dict(
             zip(
                 _VIEW_IDS,

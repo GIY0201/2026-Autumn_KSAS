@@ -1,0 +1,142 @@
+# Budgets remain diagnostic proposals, not aircraft limits. Outbound 20 s is user-approved.
+schema_version: transition-probe-v1
+time_steps_s: [0.02, 0.01]
+position_refinement_tolerance_m: 0.1
+defaults:
+  padding_s: 2
+  numeric_tolerance: 0.000001
+  tracking_tolerance_mps: 0.01
+  position_fd_tolerance_mps: 0.05
+  jerk_limit_mps3: 2
+  limits: &normal
+    minimum_horizontal_speed_mps: 0
+    maximum_horizontal_speed_mps: 40
+    maximum_vertical_speed_mps: 8
+    maximum_track_turn_rate_rad_s: 0.5
+    horizontal_acceleration_max_mps2: 2.5
+    tangential_acceleration_max_mps2: 2
+    vertical_acceleration_max_mps2: 1
+cases:
+  - case_id: fixed_wing_turn
+    label: 고정익 · 직선에서 선회 진입 후 직선 회복
+    object_id: fixed_wing
+    initial_position: [0, 0, 300]
+    initial_target: [30, 0, 0]
+    expected_final_altitude_m: 300
+    negative_control: true
+    segments:
+      - {label: 선회 진입, duration_s: 12, target: [30, 0, 0.08]}
+      - {label: 선회 유지, duration_s: 10, target: [30, 0, 0.08]}
+      - {label: 직선 회복, duration_s: 12, target: [30, 0, 0]}
+  - case_id: fixed_wing_climb_to_cruise
+    label: 고정익 · 10도 상승에서 300m 순항 진입
+    object_id: fixed_wing
+    initial_position: [0, 0, 258.3244373599367]
+    initial_target: [29.544232590366242, 5.2094453300079095, 0]
+    expected_final_altitude_m: 300
+    segments:
+      - {label: 상승률 완화, duration_s: 12, target: [30, 0, 0]}
+  - case_id: fixed_wing_landing_fixture
+    label: 고정익 · 3도 접근에서 착륙·지상 정지 모사
+    object_id: fixed_wing
+    # Ten metres here is ONLY a probe fixture, not the approved helicopter rule.
+    initial_position: [0, 0, 12.096311171321648]
+    initial_target: [20, -1.0481555856608242, 0]
+    expected_final_altitude_m: 0
+    segments:
+      - {label: 하강률 완화·접지, duration_s: 19.081136687728208, target: [20, 0, 0]}
+      - {label: 지상 감속, duration_s: 20, target: [0, 0, 0]}
+  - case_id: helicopter_turn
+    label: 헬기 · 수평 이동에서 선회 진입 후 회복
+    object_id: helicopter
+    initial_position: [0, 0, 500]
+    initial_target: [15, 0, 0]
+    expected_final_altitude_m: 500
+    negative_control: true
+    segments:
+      - {label: 선회 진입, duration_s: 10, target: [15, 0, 0.13333333333333333]}
+      - {label: 선회 유지, duration_s: 10, target: [15, 0, 0.13333333333333333]}
+      - {label: 직선 회복, duration_s: 10, target: [15, 0, 0]}
+  - case_id: helicopter_climb_to_cruise
+    label: 헬기 · 상승에서 500m 수평 이동 진입
+    object_id: helicopter
+    initial_position: [0, 0, 479]
+    initial_target: [10, 3, 0]
+    expected_final_altitude_m: 500
+    segments:
+      - {label: 상승률 완화, duration_s: 10, target: [10, 0, 0]}
+  - case_id: helicopter_landing
+    label: 헬기 · 10m에서 수직 저속 착륙·정지
+    object_id: helicopter
+    initial_position: [0, 0, 12]
+    initial_target: [0, -1, 0]
+    expected_final_altitude_m: 0
+    segments:
+      - {label: 10m부터 접지 전 감속, duration_s: 20, target: [0, 0, 0]}
+  - case_id: vtol_wing_turn
+    label: VTOL 고정익 · 가속과 선회 진입을 함께 수행
+    object_id: vtol
+    initial_position: [0, 0, 500]
+    initial_target: [25, 0, 0]
+    expected_final_altitude_m: 500
+    segments:
+      - {label: 가속·선회 진입, duration_s: 12, target: [30, 0, 0.08]}
+      - {label: 선회 유지, duration_s: 10, target: [30, 0, 0.08]}
+      - {label: 직선 회복, duration_s: 12, target: [30, 0, 0]}
+  - case_id: vtol_climb_to_cruise
+    label: VTOL 고정익 · 상승에서 500m 순항 진입
+    object_id: vtol
+    initial_position: [0, 0, 465.27036446661396]
+    initial_target: [24.6201938253052, 4.341204441673258, 0]
+    expected_final_altitude_m: 500
+    segments:
+      - {label: 상승률 완화·가속, duration_s: 12, target: [30, 0, 0]}
+  - case_id: vtol_transition_out
+    label: VTOL · 80m에서 20초 직선 전방 가속
+    object_id: vtol
+    initial_position: [0, 0, 80]
+    initial_target: [0, 0, 0]
+    expected_final_altitude_m: 80
+    limits:
+      <<: *normal
+      horizontal_acceleration_max_mps2: 2
+      tangential_acceleration_max_mps2: 2
+    segments:
+      - {label: 순항 전환 운동 모사, duration_s: 20, target: [20, 0, 0]}
+  - case_id: vtol_transition_in
+    label: VTOL · 10초 직선 감속·정지 운동 모사
+    object_id: vtol
+    # The landing-side transition altitude remains unapproved; 100 is a fixture.
+    initial_position: [0, 0, 100]
+    initial_target: [20, 0, 0]
+    expected_final_altitude_m: 100
+    limits:
+      <<: *normal
+      horizontal_acceleration_max_mps2: 4
+      tangential_acceleration_max_mps2: 4
+    segments:
+      - {label: 호버 전환 운동 모사, duration_s: 10, target: [0, 0, 0]}
+  - case_id: vtol_transition_out_budget_rejection
+    label: 거부 확인 · 가속도 2로는 10초에 20m/s 전환 목표를 못 따름
+    object_id: vtol
+    expected_pass: false
+    initial_position: [0, 0, 80]
+    initial_target: [0, 0, 0]
+    expected_final_altitude_m: 80
+    limits:
+      <<: *normal
+      horizontal_acceleration_max_mps2: 2
+    segments:
+      - {label: 부족한 가속 한도, duration_s: 10, target: [20, 0, 0]}
+  - case_id: vtol_transition_in_budget_rejection
+    label: 거부 확인 · 감속도 2로는 10초 정지 전환 목표를 못 따름
+    object_id: vtol
+    expected_pass: false
+    initial_position: [0, 0, 100]
+    initial_target: [20, 0, 0]
+    expected_final_altitude_m: 100
+    limits:
+      <<: *normal
+      horizontal_acceleration_max_mps2: 2
+    segments:
+      - {label: 부족한 감속 한도, duration_s: 10, target: [0, 0, 0]}

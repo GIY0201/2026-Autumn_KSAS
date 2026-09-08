@@ -39,5 +39,5 @@ def test_object_identity_is_not_replaced_by_the_viewers_original_aircraft() -> N
     )
 
     assert dataset.episode_option_label("sample-17") == (
-        "쿼드콥터 · Crazyflie · 진단 시뮬레이션 1 (ID: sample-17)"
+        "쿼드콥터 · Crazyflie · 진단 시뮬레이션 1"
     )

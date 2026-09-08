@@ -152,8 +152,8 @@ def test_truth_reader_requires_explicit_evaluation_path(tmp_path: Path) -> None:
         [
             {
                 "episode_id": "episode-001",
-                "step": "0",
-                "t_s": "0",
+                "step": str(step),
+                "t_s": f"{step / 5:.1f}",
                 "x_m": "1",
                 "y_m": "2",
                 "z_m": "100",
@@ -164,6 +164,7 @@ def test_truth_reader_requires_explicit_evaluation_path(tmp_path: Path) -> None:
                 "ay_mps2": "0",
                 "az_mps2": "0",
             }
+            for step in range(301)
         ],
     )
 

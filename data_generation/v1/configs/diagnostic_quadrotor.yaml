@@ -1,8 +1,5 @@
 seed: 17
 profile_id: crazyflie_eschmann_2024
-ui:
-  label: "쿼드콥터 · Crazyflie 2.1 · 1개 미리보기"
-  description: "실제 Crazyflie 저속 비행 자료를 참고해 새 3D 목표를 만들고, 공개 운동모델로 부드럽게 이동·정지하는 60초 점검 궤적 1개를 생성합니다. 원본 제어 기록을 재생하거나 독립 실비행을 검증하는 기능은 아닙니다."
 mode: diagnostic
 episode_count: 1
 source_motion_check_status: NOT_RUN

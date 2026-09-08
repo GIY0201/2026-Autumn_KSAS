@@ -1,0 +1,107 @@
+# Constrained Stage 1 kinematic diagnostic; not an X8 6-DOF replacement or flight fit.
+engine: point_mass
+object_id: x8_fixed_wing
+model_id: fixed_wing_point_mass_v1
+identity_label: "고정익 UAV · 제약 질점 모델"
+source_id: x8_dataverse_2024
+input_id: doi:10.18710/U4TLYV
+evidence_status: SOURCE_AND_DESIGN_CONSTRAINED_KINEMATIC
+metadata:
+  motion_abstraction: constrained_point_mass_kinematics
+  operating_parameter_role: separate_source_reference_legacy_design_and_new_design
+  source_model_role: x8_dataset_provenance_and_legacy_diagnostic_not_fitted_dynamics
+source_files:
+  - path: data_sources/x8_dataverse_2024/README.md
+    sha256: 55c7a34f411b9549b64e611853afd3180d13eae1d33bf2d3e6dd4c780711bbb7
+    url: https://dataverse.no/dataset.xhtml?persistentId=doi:10.18710/U4TLYV
+source_evidence:
+  - location: data_generation/v1/scenario.py:_working_region_failure
+    statement: "Existing X8 diagnostic code checks an airspeed range of 14 through 22 m/s."
+    use: legacy_simulation_design_not_airframe_limit
+  - location: data_generation/v1/control.py:MAX_BANK_COMMAND_RAD
+    statement: "Existing X8 controller uses a 15 degree maximum bank command."
+    use: derived_point_mass_horizontal_acceleration_budget_only
+limitations:
+  - This constrained point-mass runner does not call the X8 6-DOF dynamics, controller, trim, or actuator code.
+  - The source dataset is retained as provenance; this profile does not fit or replay its flight logs.
+  - Track heading and track turn rate are not body yaw or body angular rate.
+  - Stage 1 excludes ground contact, takeoff, landing, 600-second scenarios, and smooth-entry/exit mission logic.
+motion:
+  integration_dt_s: 0.02
+  minimum_horizontal_speed_mps: 14.0
+  maximum_horizontal_speed_mps: 22.0
+  maximum_vertical_speed_mps: 1.0
+  maximum_track_turn_rate_rad_s: 0.187691710568191
+  horizontal_acceleration_max_mps2: 2.62768394795467
+  tangential_acceleration_max_mps2: 1.0
+  vertical_acceleration_max_mps2: 0.5
+  maximum_track_path_angle_deg: 20.0
+initial_state:
+  position_enu_m:
+    minimum: [-500.0, -500.0, 80.0]
+    maximum: [500.0, 500.0, 120.0]
+  horizontal_speed_mps: [18.0, 18.0]
+  track_heading_deg: [-180.0, 180.0]
+  vertical_speed_mps: [0.0, 0.0]
+  track_turn_rate_rad_s: [0.0, 0.0]
+commands:
+  - command_id: legacy_straight_distance
+    duration_s: 5.55555555555556
+    target_horizontal_speed_mps: 18.0
+    target_vertical_speed_mps: 0.0
+    target_track_turn_rate_rad_s: 0.0
+  - command_id: legacy_left_turn
+    duration_s: 5.45044147622736
+    target_horizontal_speed_mps: 18.0
+    target_vertical_speed_mps: 0.0
+    target_track_turn_rate_rad_s: 0.0960653880758149
+  - command_id: legacy_climb
+    duration_s: 8.0
+    target_horizontal_speed_mps: 18.0
+    target_vertical_speed_mps: 0.5
+    target_track_turn_rate_rad_s: 0.0960653880758149
+  - command_id: legacy_recover_and_accelerate
+    duration_s: 8.0
+    target_horizontal_speed_mps: 19.0
+    target_vertical_speed_mps: 0.0
+    target_track_turn_rate_rad_s: 0.0
+  - command_id: legacy_right_turn
+    duration_s: 5.45044147622736
+    target_horizontal_speed_mps: 19.0
+    target_vertical_speed_mps: 0.0
+    target_track_turn_rate_rad_s: -0.0960653880758149
+  - command_id: legacy_descent
+    duration_s: 8.0
+    target_horizontal_speed_mps: 18.0
+    target_vertical_speed_mps: -0.5
+    target_track_turn_rate_rad_s: -0.0960653880758149
+  - command_id: legacy_course_hold_to_window_end
+    duration_s: null
+    target_horizontal_speed_mps: 18.0
+    target_vertical_speed_mps: 0.0
+    target_track_turn_rate_rad_s: 0.0
+parameter_provenance:
+  motion:
+    integration_dt_s: {role: new_simulation_design, basis: Explicit point-mass integration grid dividing the v1 output grid.}
+    minimum_horizontal_speed_mps: {role: legacy_simulation_design, basis: scenario.py working-region airspeed lower check.}
+    maximum_horizontal_speed_mps: {role: legacy_simulation_design, basis: scenario.py working-region airspeed upper check.}
+    maximum_vertical_speed_mps: {role: new_simulation_design, basis: Explicit Stage 1 bounded vertical diagnostic setting.}
+    maximum_track_turn_rate_rad_s: {role: derived, basis: g*tan(15 deg)/14 m/s using the legacy command cap and diagnostic minimum speed.}
+    horizontal_acceleration_max_mps2: {role: derived, basis: 9.80665*tan(15 deg) using the legacy command cap.}
+    tangential_acceleration_max_mps2: {role: new_simulation_design, basis: Explicit shared-budget Stage 1 tangential cap.}
+    vertical_acceleration_max_mps2: {role: new_simulation_design, basis: Explicit independent Stage 1 vertical cap.}
+    maximum_track_path_angle_deg: {role: new_simulation_design, basis: Explicit track-path check; it is not body pitch.}
+  initial_state:
+    position_enu_m: {role: legacy_simulation_design, basis: Existing synthetic X8 initialization bounds.}
+    horizontal_speed_mps: {role: legacy_simulation_design, basis: Existing X8 nominal target speed.}
+    track_heading_deg: {role: legacy_simulation_design, basis: Existing seeded synthetic X8 yaw range reinterpreted only as track heading.}
+    vertical_speed_mps: {role: legacy_simulation_design, basis: Existing level initialization.}
+    track_turn_rate_rad_s: {role: new_simulation_design, basis: Point-mass initial straight track.}
+  commands:
+    legacy_straight_distance: {role: derived, basis: 100 m divided by 18 m/s from the legacy first event.}
+    legacy_left_turn: {role: derived, basis: Positive ENU track turn for a 30 degree left target at g*tan(10 deg)/18 m/s.}
+    legacy_climb: {role: new_simulation_design, basis: Explicit finite hold of the legacy climb target with a positive ENU left track turn and no controller triggers.}
+    legacy_recover_and_accelerate: {role: new_simulation_design, basis: Explicit finite hold of legacy recovery targets.}
+    legacy_right_turn: {role: derived, basis: Negative ENU track turn for a 30 degree right target at the derived 10 degree-bank track rate.}
+    legacy_descent: {role: new_simulation_design, basis: Explicit finite hold of the legacy descent target with a negative ENU right track turn and no controller triggers.}
+    legacy_course_hold_to_window_end: {role: legacy_simulation_design, basis: Existing final course-hold target extended to the observation boundary.}

@@ -1,0 +1,14 @@
+schema_version: gazebo-steady-envelope-v1
+reference_config: gazebo_trials.yaml
+# Follow up the single open numerical boundary, not an operating speed range.
+speed_scan_step_mps: 10.0
+speed_search_ceiling_mps: 1000.0
+boundary_precision_mps: 0.05
+force_residual_tolerance_mps2: 0.0001
+wing_models: []
+wing_path_angles_deg: [-10, -3, 0, 3, 10]
+wing_banks_deg: [-30, -15, 0, 15, 30]
+rotor_models: [helicopter]
+rotor_vertical_speeds_mps: [-6]
+rotor_turns_deg_s: [0]
+prior_conditions: outputs/data_generation/v1/291d7923-a378-4c1c-a0df-5638131aa200/evaluation/conditions.csv

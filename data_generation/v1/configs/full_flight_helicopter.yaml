@@ -1,0 +1,16 @@
+seed: 17
+profile_id: helicopter_full_flight_v1
+scenario_id: H01-B
+ui:
+  label: "헬기 · 전체 이착륙 · 1개 미리보기"
+  description: "최대 600초, 질점 시나리오. CLI scenario_id로 기동 조합을 명시합니다. 생성용 가정이며 실기체 성능 검증이 아닙니다."
+mode: diagnostic
+episode_count: 1
+source_motion_check_status: NOT_RUN
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
+

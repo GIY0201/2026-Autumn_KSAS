@@ -1,0 +1,83 @@
+# Simulation design settings, not measured aircraft performance limits.
+schema: full-flight-settings-v1
+evidence_status: experimental_kinematic_generation
+dt_s: 0.02
+output_dt_s: 0.2
+max_duration_s: 600
+max_altitude_m: 1000
+horizontal_acceleration_mps2: 2.5
+tangential_acceleration_mps2: 2
+vertical_acceleration_mps2: 1
+jerk_mps3: 2
+numeric_tolerance: 0.005
+altitude_tolerance_m: 0.00001
+transition_min_s: 12
+stretch_factor: 1.25
+max_attempts: 5
+ground_hold_s: 2
+hover_hold_s: 2
+cruise_hold_s: 40
+turn_ramp_fraction: 0.2
+heading_range_deg: [-180, 180]
+speed_scale_range: [0.95, 1.0]
+objects:
+  fixed_wing:
+    prefix: F
+    label: 고정익
+    altitude_m: 300
+    horizontal_speed_mps: 30
+    minimum_airborne_horizontal_speed_mps: 20
+    turn_rate_rad_s: 0.06
+    initial_altitude_m: 50
+    approach_altitude_m: 100
+    low_angle_deg: 3
+    max_angle_deg: 10
+    flare_altitude_m: 10
+    climb: [straight, turn, s_turn, spiral]
+    cruise: [straight, turn, s_turn, orbit]
+    descent: [straight, turn, s_turn, spiral]
+  helicopter:
+    prefix: H
+    label: 헬기
+    altitude_m: 500
+    initial_altitude_m: 80
+    approach_altitude_m: 40
+    slow_landing_altitude_m: 10
+    horizontal_speed_mps: 15
+    vertical_speed_mps: 4
+    takeoff_vertical_speed_mps: 3
+    landing_vertical_speed_mps: 2
+    slow_landing_speed_mps: 1
+    turn_rate_rad_s: 0.12
+    climb: [vertical, straight, turn, spiral]
+    cruise: [hover, straight, turn, s_turn, orbit, stop_restart]
+    descent: [vertical, straight, turn, spiral]
+  vtol:
+    prefix: V
+    label: VTOL
+    altitude_m: 500
+    initial_altitude_m: 80
+    approach_altitude_m: 80
+    slow_landing_altitude_m: 10
+    horizontal_speed_mps: 30
+    minimum_airborne_horizontal_speed_mps: 20
+    transition_speed_mps: 20
+    outbound_transition_s: 20
+    inbound_transition_s: 10
+    takeoff_vertical_speed_mps: 3
+    landing_vertical_speed_mps: 2
+    slow_landing_speed_mps: 1
+    turn_rate_rad_s: 0.06
+    max_angle_deg: 10
+    climb: [straight, turn, s_turn, spiral]
+    cruise: [straight, turn, s_turn, orbit]
+    descent: [straight, turn, s_turn, spiral]
+labels:
+  straight: 직선
+  vertical: 수직
+  turn: 선회
+  s_turn: S자
+  spiral: 나선
+  orbit: 원주비행
+  hover: 호버링
+  stop_restart: 정지 후 재출발

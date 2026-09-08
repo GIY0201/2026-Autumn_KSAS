@@ -89,9 +89,9 @@ def test_export_root_does_not_redirect_generated_data(tmp_path):
 
 def test_data_callbacks_resolve_the_selected_dataset_not_a_global_current_value(tmp_path):
     app = create_app(_dataset_path(tmp_path), output_root=tmp_path / "outputs")
-    for fragment in ("figure-xy.figure", "figure-xy.extendData", "export-status.children"):
+    for fragment in ("figure-xy.figure", "export-status.children"):
         callback = next(value for key, value in app.callback_map.items() if fragment in key)
-        assert "dataset-key" in {item["id"] for item in callback["state"]}
+        assert "dataset-key" in {item["id"] for item in callback["state"] + callback["inputs"]}
     select = _component_by_id(app.layout, "dataset-select")
     assert select.value == _component_by_id(app.layout, "dataset-key").data
 
@@ -168,6 +168,7 @@ def test_failed_job_never_becomes_a_dataset_option(tmp_path):
 
 
 def _post(app, fragment, inputs, states, changed):
+    inputs = {"camera-interacting": False, **inputs}
     key, callback = next((key, value) for key, value in app.callback_map.items() if fragment in key)
     outputs = callback["output"]
 
@@ -201,7 +202,7 @@ def test_http_generate_poll_open_and_render_flow(tmp_path, monkeypatch, public_o
     initial_key = _component_by_id(app.layout, "dataset-select").value
     action_inputs = {"generation-start": 1, "generation-cancel": 0, "generation-open": 0}
     action_state = {
-        "generation-preset": "diagnostic",
+        "generation-preset": "diagnostic_fixed_wing_point_mass",
         "generation-seed": 42,
         "generation-job": None,
         "generation-refresh": 0,
@@ -242,39 +243,38 @@ def test_http_generate_poll_open_and_render_flow(tmp_path, monkeypatch, public_o
     )
     assert layout["dataset-load-error"]["children"] == ""
     selected = load_viewer_dataset(finished.result_path, public_only=public_only)
-    figure_inputs = {"episode-select": list(selected.episode_ids), "variant-select": "sigma_3m"}
+    figure_inputs = {
+        "episode-select": list(selected.episode_ids),
+        "variant-select": "sigma_3m",
+        "dataset-key": new_key,
+        "player-state": {"step": 0, "playing": False},
+    }
     if not public_only:
         figure_inputs["truth-toggle"] = ["show"]
     figures = _post(
         app,
         "figure-xy.figure",
         figure_inputs,
-        {"dataset-key": new_key, "player-state": {"step": 0, "playing": False}},
+        {"render-context": None},
         "episode-select.value",
     )
     assert figures["figure-xy"]["figure"]["data"]
     markers = _post(
         app,
-        "figure-xy.extendData",
-        {"player-state": {"step": 1, "playing": True}},
-        {**figure_inputs, "dataset-key": new_key},
+        "figure-xy.figure",
+        {**figure_inputs, "player-state": {"step": 1, "playing": True}},
+        {"render-context": figures["render-context"]["data"]},
         "player-state.data",
     )
-    marker_data, marker_trace_indexes, max_points = markers["figure-xy"][
-        "extendData"
-    ]
+    operations = markers["figure-xy"]["figure"]["operations"]
+    values = {tuple(op["location"]): op["params"]["value"] for op in operations}
     episode_id = selected.episode_ids[0]
     observed = selected.observed(episode_id, "sigma_3m")[1]
-    assert max_points == 1
-    if public_only:
-        assert marker_trace_indexes == [1]
-        assert marker_data["x"][0][0] == pytest.approx(observed[0])
-        assert marker_data["y"][0][0] == pytest.approx(observed[1])
-    else:
+    observed_index = 1 if public_only else 3
+    assert values[("data", observed_index, "x")] == pytest.approx([observed[0]])
+    assert values[("data", observed_index, "y")] == pytest.approx([observed[1]])
+    if not public_only:
         truth = selected.truth(episode_id)[1]
-        assert marker_trace_indexes == [2, 3]
-        assert marker_data["x"][0][0] == pytest.approx(truth[0])
-        assert marker_data["y"][0][0] == pytest.approx(truth[1])
-        assert marker_data["x"][1][0] == pytest.approx(observed[0])
-        assert marker_data["y"][1][0] == pytest.approx(observed[1])
+        assert values[("data", 2, "x")] == pytest.approx([truth[0]])
+        assert values[("data", 2, "y")] == pytest.approx([truth[1]])
     jobs.close()

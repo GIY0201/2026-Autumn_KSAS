@@ -28,7 +28,7 @@ from .dataset import (
     X8_MODEL_ID,
     X8_OBJECT_ID,
 )
-from .generate import PROJECT_ROOT, generate_from_config
+from .generate import PROJECT_ROOT, configured_episode_count, generate_from_config
 from .profiles import load_generation_profile
 from .source import X8_SOURCE_ID
 
@@ -95,7 +95,7 @@ def list_presets() -> tuple[GenerationPreset, ...]:
                 preset_id=path.stem,
                 label=str(config.ui.label),
                 description=str(config.ui.description),
-                episode_count=int(config.episode_count),
+                episode_count=configured_episode_count(config),
                 default_seed=int(config.seed),
                 object_id=_request_provenance(config.get("profile_id"))["object_id"],
             )
@@ -206,6 +206,11 @@ def _validate_result(
     public = read_public_dataset(result_path / "public")
     if len(public.episodes) != total:
         raise ValueError("generated episode count does not match the request")
+    effective = OmegaConf.load(result_path / "effective_model_config.yaml")
+    if OmegaConf.select(effective, "run.training") is not None:
+        from .training_data import read_sequence_index
+
+        read_sequence_index(result_path, public.episodes)
 
 
 def run_job(work_path: Path, output_root: Path) -> int:
@@ -229,7 +234,7 @@ def run_job(work_path: Path, output_root: Path) -> int:
 
     try:
         config = OmegaConf.load(work_path / "request.yaml")
-        total = int(config.episode_count)
+        total = configured_episode_count(config)
         result = generate_from_config(config, output_root=output_root, progress=progress)
         result_path = result.path.resolve()
         if result.status != "complete":

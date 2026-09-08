@@ -98,13 +98,16 @@ def test_generation_records_the_unchanged_start_code_hash(
     )
     original_write_dataset = generate_module.write_dataset
 
-    def verify_start_snapshot(episodes, *, request, output_root, source_motion_check_report=None):
+    def verify_start_snapshot(
+        episodes, *, request, output_root, source_motion_check_report=None, training_config=None
+    ):
         assert request.code_hash_at_start == expected_hash
         return original_write_dataset(
             episodes,
             request=request,
             output_root=output_root,
             source_motion_check_report=source_motion_check_report,
+            training_config=training_config,
         )
 
     monkeypatch.setattr(generate_module, "write_dataset", verify_start_snapshot)

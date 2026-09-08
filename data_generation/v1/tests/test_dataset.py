@@ -87,6 +87,8 @@ def test_writer_creates_new_traceable_dataset_ids_with_only_public_allowed_files
     validate_public_dataset(first.path / "public")
     assert first.dataset_id != second.dataset_id
     assert first.path != second.path
+    assert "X8_고정익_UAV" in first.path.name
+    assert "diagnostic_1episodes_seed17" in first.path.name
     assert (first.path / "evaluation" / "truth.csv").is_file()
     assert (first.path / "manifest.csv").is_file()
     assert (first.path / "files.csv").is_file()

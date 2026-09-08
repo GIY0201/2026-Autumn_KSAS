@@ -1,0 +1,91 @@
+schema_version: gazebo-reduced-force-v1
+source_root: ../../../../data_sources/gazebo_reference_2026
+provenance:
+  source_role: pinned_gazebo_force_coefficients
+  abstraction: reduced_translational_dynamics_with_prescribed_attitude
+  controller_role: simulation_design_not_source_performance_limits
+  grid_role: requested_trial_points_not_operating_envelope
+  exclusions: [rotational_6dof, joint_mechanisms, rotor_flapping, induced_inflow, sensor_simulation, ground_contact]
+sources:
+  x500.sdf: {sha256: CB76A4AFD439F253A8C516B1FCD3528F80347619CFA46BEBB620557054FBF125}
+  x500_base.sdf: {sha256: E807DCA3406F7CD5CB3D545898601C3EC17E0E5242E25CF467A69DF1812CF436}
+  rc_cessna.sdf: {sha256: C12836A4664FFE4C6A118F46158C70131D006C93C0483118971D17AAD1B51BB5}
+  standard_vtol.sdf: {sha256: A411DB01615E3B7F78102FCA270C2979198C709C4F07CD59A602A553C2BB4AD7}
+  helicopter.sdf: {sha256: D46E068A8C9245E5CD14F5540A6B349BC96AB2094F455E51F1073F59EB3872D6}
+  rotor_head_cw.sdf: {sha256: 4695529F41E6DE19A16DA194475FB7B32EB83A730EA84D1499EDEE45CAB8B90D}
+  LiftDrag.cc: {sha256: B8CE3FD358536E8BA70470ED764C02B01E330B5D9B81A66D27F425599CF6E246}
+  MulticopterMotorModel.cc: {sha256: 0FAAF567D26A9C50657348444AAE6D5D74BB2B3FA3D6B4C1C53EFF431C8711D4}
+models:
+  rc_cessna:
+    label: 고정익 RC Cessna
+    kind: wing
+    mass_files: [rc_cessna.sdf]
+    motor_file: rc_cessna.sdf
+    motor_roles: {rotor_puller: forward}
+    surface_file: rc_cessna.sdf
+    initial_speed_mps: 15.0
+    modes: [wing]
+  x500:
+    label: 쿼드콥터 X500
+    kind: multirotor
+    mass_files: [x500_base.sdf]
+    motor_file: x500.sdf
+    motor_roles: {rotor_0: lift, rotor_1: lift, rotor_2: lift, rotor_3: lift}
+    initial_speed_mps: 0.0
+    modes: [rotor]
+  standard_vtol:
+    label: Standard VTOL
+    kind: vtol
+    mass_files: [standard_vtol.sdf]
+    motor_file: standard_vtol.sdf
+    motor_roles: {rotor_0: lift, rotor_1: lift, rotor_2: lift, rotor_3: lift, rotor_puller: forward}
+    surface_file: standard_vtol.sdf
+    initial_speed_mps: 15.0
+    modes: [wing, rotor, transition]
+  helicopter:
+    label: 소형 헬기 CW rotor
+    kind: helicopter
+    mass_files: [helicopter.sdf, rotor_head_cw.sdf]
+    blade_file: rotor_head_cw.sdf
+    initial_speed_mps: 0.0
+    rotor_omega_rad_s: 240.0
+    rotor_omega_role: trial_setting_48_percent_of_source_command_multiplier_500_not_measured_rpm
+    modes: [rotor]
+settings:
+  dt_s: 0.02
+  output_dt_s: 0.1
+  settle_s: 5.0
+  entry_s: 5.0
+  hold_s: 15.0
+  recovery_s: 5.0
+  terminal_window_s: 3.0
+  initial_altitude_m: 200.0
+  gravity_mps2: 9.80665
+  azimuth_samples: 8
+  speed_tolerance_mps: 0.75
+  vertical_tolerance_mps: 0.35
+  turn_tolerance_deg_s: 1.5
+  angle_tolerance_deg: 1.5
+  failure_speed_mps: 250.0
+controller:
+  speed_gain_per_s: 0.8
+  path_gain_per_s: 0.8
+  velocity_gain_per_s: 1.2
+  attitude_tau_s: 0.35
+  alpha_tau_s: 0.3
+  bank_tau_s: 0.5
+  collective_tau_s: 0.25
+  maximum_tilt_deg: 30.0
+  maximum_bank_deg: 30.0
+  alpha_stall_fraction: 0.9
+grids:
+  wing:
+    speeds_mps: [10.0, 15.0, 20.0]
+    path_angles_deg: [-10.0, 0.0, 10.0]
+    banks_deg: [-15.0, 0.0, 15.0]
+  rotor:
+    speeds_mps: [0.0, 5.0, 10.0]
+    vertical_speeds_mps: [-2.0, 0.0, 2.0]
+    turns_deg_s: [-10.0, 0.0, 10.0]
+  transition:
+    speeds_mps: [10.0, 15.0, 20.0]

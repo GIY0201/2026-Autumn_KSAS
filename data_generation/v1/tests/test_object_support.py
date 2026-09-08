@@ -7,6 +7,7 @@ def test_object_readiness_is_derived_from_actual_presets() -> None:
     presets = service.list_presets()
     support = service.list_object_support(presets)
     assert {item.object_id for item in support} == {
+        "fixed_wing",
         "x8_fixed_wing",
         "quadrotor",
         "vtol",
@@ -22,8 +23,25 @@ def test_object_readiness_is_derived_from_actual_presets() -> None:
     by_id = {item.object_id: item for item in support}
     assert by_id["x8_fixed_wing"].available
     assert by_id["quadrotor"].available
-    assert by_id["quadrotor"].preset_ids == ("diagnostic_quadrotor", "pilot_quadrotor")
+    assert by_id["x8_fixed_wing"].preset_ids == (
+        "diagnostic_fixed_wing_point_mass",
+        "pilot_fixed_wing_point_mass",
+    )
+    assert by_id["quadrotor"].preset_ids == (
+        "diagnostic_quadrotor_point_mass",
+        "pilot_quadrotor_point_mass",
+    )
     assert by_id["vtol"].available
-    assert by_id["vtol"].preset_ids == ("diagnostic_vtol", "pilot_vtol")
+    assert by_id["vtol"].preset_ids == (
+        "corpus_vtol",
+        "diagnostic_vtol",
+        "full_flight_vtol",
+        "pilot_vtol",
+    )
     assert by_id["helicopter"].available
-    assert by_id["helicopter"].preset_ids == ("diagnostic_helicopter", "pilot_helicopter")
+    assert by_id["helicopter"].preset_ids == (
+        "corpus_helicopter",
+        "diagnostic_helicopter",
+        "full_flight_helicopter",
+        "pilot_helicopter",
+    )

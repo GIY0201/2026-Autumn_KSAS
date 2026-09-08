@@ -15,6 +15,7 @@ from .motion_reference_analysis import (
     load_motion_reference_config,
 )
 from .motion_reference_metadata import validate_source_grounded_metadata
+from .point_mass_profile import validate_point_mass_profile
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROFILE_ROOT = Path(__file__).resolve().parent / "configs" / "profiles"
@@ -88,18 +89,35 @@ def load_generation_profile(profile_id: str) -> dict:
         if "physics" in profile:
             raise ValueError("bounded_motion profiles use motion, not physics")
         required_model_config = "motion"
+    elif engine == "point_mass":
+        if profile["object_id"] not in {"x8_fixed_wing", "quadrotor"}:
+            raise ValueError("point_mass engine supports only fixed-wing or quadrotor profiles")
+        if "physics" in profile:
+            raise ValueError("point_mass profiles use motion, not physics")
+        required_model_config = "motion"
+    elif engine == "full_flight":
+        from .full_flight_config import load_settings
+
+        if profile["object_id"] not in {"fixed_wing", "helicopter", "vtol"}:
+            raise ValueError("unsupported full-flight object")
+        profile["motion"] = load_settings()
+        required_model_config = "motion"
     else:
         raise ValueError(f"unsupported generation profile engine: {engine}")
-    for field in (required_model_config, "experiment"):
+    required_sections = (required_model_config,) if engine in {"point_mass", "full_flight"} else (
+        required_model_config,
+        "experiment",
+    )
+    for field in required_sections:
         if not isinstance(profile.get(field), dict) or not profile[field]:
             raise ValueError(f"profile requires {field} configuration")
     if not isinstance(profile.get("limitations"), list) or not profile["limitations"]:
         raise ValueError("profile requires explicit limitations")
-    if engine == "bounded_motion":
+    if engine in {"bounded_motion", "point_mass"}:
         if not isinstance(profile.get("metadata"), dict) or not profile["metadata"]:
-            raise ValueError("bounded_motion profile requires metadata")
+            raise ValueError(f"{engine} profile requires metadata")
         if not isinstance(profile.get("source_evidence"), list) or not profile["source_evidence"]:
-            raise ValueError("bounded_motion profile requires separate source_evidence")
+            raise ValueError(f"{engine} profile requires separate source_evidence")
     sources = profile.get("source_files")
     if not isinstance(sources, list) or not sources:
         raise ValueError("profile requires local source_files")
@@ -125,4 +143,6 @@ def load_generation_profile(profile_id: str) -> dict:
             raise ValueError(f"source hash mismatch: {source['path']}")
     if engine == "bounded_motion":
         validate_bounded_motion_profile(profile)
+    if engine == "point_mass":
+        validate_point_mass_profile(profile)
     return profile

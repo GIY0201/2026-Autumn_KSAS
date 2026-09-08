@@ -1,0 +1,48 @@
+schema_version: x8-characterization-v1
+
+provenance:
+  parameter_role: experiment_protocol
+  dynamics_basis: Existing x8.py, Low-Hansen et al. (2025), DOI 10.1007/s13272-025-00816-3.
+  controller_basis: Existing control.py X8Autopilot; not PX4, not an identified real controller.
+  command_basis: Speeds inside legacy 14-22 m/s experiment envelope; 10 deg turns and 0.5 m/s climb/descent from scenario.py. The 16/18/20 m/s grid samples this envelope; it is not a certified performance range.
+  timing_basis: Baseline/hold/recovery windows and quintic command blends are explicit test protocol, not measured response times. Keep unsettled outcomes visible.
+  reporting_basis: Tolerances and missing-value floors classify this report only; they do not set physical limits or tune the point-mass profiles.
+  scope: Airborne calm-air experiments. No ground takeoff/landing, PX4, Gazebo, camera, GPS, or production profile updates.
+
+settings:
+  physics_dt_s: 0.0025
+  record_dt_s: 0.01
+  phase_durations_s:
+    baseline: 6.0
+    entry: 3.0
+    hold: 12.0
+    recovery: 3.0
+    post: 12.0
+  initial_altitude_m: 100.0
+  speed_bounds_mps: [14.0, 22.0]
+  alpha_bounds_deg: [-5.0, 15.0]
+  max_abs_beta_deg: 10.0
+  max_abs_bank_deg: 45.0
+  max_abs_pitch_deg: 30.0
+  speed_tolerance_mps: 0.5
+  bank_tolerance_deg: 1.0
+  climb_tolerance_mps: 0.1
+  terminal_dwell_s: 2.0
+  speed_floor_mps: 0.000001
+  turn_rate_floor_rad_s: 0.00001
+
+cases:
+  - {trial_id: straight_16, label: '16 m/s 직선 순항', initial_speed_mps: 16.0, target_speed_mps: 16.0, bank_deg: 0.0, climb_mps: 0.0}
+  - {trial_id: left_16, label: '16 m/s 좌선회 진입·회복', initial_speed_mps: 16.0, target_speed_mps: 16.0, bank_deg: -10.0, climb_mps: 0.0}
+  - {trial_id: right_16, label: '16 m/s 우선회 진입·회복', initial_speed_mps: 16.0, target_speed_mps: 16.0, bank_deg: 10.0, climb_mps: 0.0}
+  - {trial_id: straight_18, label: '18 m/s 직선 순항', initial_speed_mps: 18.0, target_speed_mps: 18.0, bank_deg: 0.0, climb_mps: 0.0}
+  - {trial_id: left_18, label: '18 m/s 좌선회 진입·회복', initial_speed_mps: 18.0, target_speed_mps: 18.0, bank_deg: -10.0, climb_mps: 0.0}
+  - {trial_id: right_18, label: '18 m/s 우선회 진입·회복', initial_speed_mps: 18.0, target_speed_mps: 18.0, bank_deg: 10.0, climb_mps: 0.0}
+  - {trial_id: straight_20, label: '20 m/s 직선 순항', initial_speed_mps: 20.0, target_speed_mps: 20.0, bank_deg: 0.0, climb_mps: 0.0}
+  - {trial_id: left_20, label: '20 m/s 좌선회 진입·회복', initial_speed_mps: 20.0, target_speed_mps: 20.0, bank_deg: -10.0, climb_mps: 0.0}
+  - {trial_id: right_20, label: '20 m/s 우선회 진입·회복', initial_speed_mps: 20.0, target_speed_mps: 20.0, bank_deg: 10.0, climb_mps: 0.0}
+  - {trial_id: accelerate, label: '18→19 m/s 가속·회복', initial_speed_mps: 18.0, target_speed_mps: 19.0, bank_deg: 0.0, climb_mps: 0.0}
+  - {trial_id: decelerate, label: '18→17 m/s 감속·회복', initial_speed_mps: 18.0, target_speed_mps: 17.0, bank_deg: 0.0, climb_mps: 0.0}
+  - {trial_id: climb, label: '직선 상승·수평 회복', initial_speed_mps: 18.0, target_speed_mps: 18.0, bank_deg: 0.0, climb_mps: 0.5}
+  - {trial_id: descend, label: '직선 하강·수평 회복', initial_speed_mps: 18.0, target_speed_mps: 18.0, bank_deg: 0.0, climb_mps: -0.5}
+  - {trial_id: turning_climb, label: '우선회 상승·회복', initial_speed_mps: 18.0, target_speed_mps: 18.0, bank_deg: 10.0, climb_mps: 0.5}

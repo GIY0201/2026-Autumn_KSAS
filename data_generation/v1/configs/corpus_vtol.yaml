@@ -1,0 +1,21 @@
+seed: 17
+profile_id: vtol_full_flight_v1
+mode: corpus
+repeats_per_scenario: 1
+source_motion_check_status: NOT_RUN
+training:
+  # Full continuous observation sequences; no model-specific context is assumed.
+  window_samples: null
+  train_windows_per_episode: 8
+  evaluation_stride_samples: 75
+  identity:
+    transition_margin_s: 3.0
+ui:
+  label: "VTOL · 모든 시나리오 + 학습데이터"
+  description: "모든 기동 조합을 train/valid/test로 저장합니다. 관측오차 3종 × 식별 획득·항상 미식별·식별 상실 3종을 생성하며 모델 학습은 실행하지 않습니다."
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

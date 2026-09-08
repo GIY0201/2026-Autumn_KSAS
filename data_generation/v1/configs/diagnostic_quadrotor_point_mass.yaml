@@ -1,0 +1,15 @@
+seed: 17
+profile_id: quadrotor_point_mass_v1
+ui:
+  label: "쿼드콥터 · 제약 질점 모델 · 1개 미리보기"
+  description: "Bitcraze calibration/reference 범위를 출처 역할로 보존한 60초 제약 질점 궤적 1개를 생성합니다. Crazyflie 6-DOF dynamics나 raw command를 재생하지 않습니다."
+mode: diagnostic
+episode_count: 1
+source_motion_check_status: NOT_RUN
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

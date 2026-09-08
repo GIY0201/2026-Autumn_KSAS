@@ -1,7 +1,4 @@
 seed: 17
-ui:
-  label: "X8 고정익 UAV · 100개 생성"
-  description: "미리보기와 같은 X8 모델로 100개를 생성하고 학습/검증/시험용 70/15/15개로 나눕니다. 여러 궤적 비교와 학습 준비용이며 시간이 걸립니다."
 mode: pilot
 episode_count: 100
 identity_label: X8 고정익 UAV

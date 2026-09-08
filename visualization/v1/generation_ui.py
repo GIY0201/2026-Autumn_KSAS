@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+import logging
 from collections import OrderedDict
+from pathlib import Path
 
 from dash import Dash, Input, Output, State, ctx, dcc, html, no_update
 
@@ -44,6 +47,63 @@ class DatasetRegistry:
             key = job.result_path.name
             self._paths[key] = job.result_path
             self._labels[key] = f"{job.label} · {job.total}개 · seed {job.seed} · {key}"
+
+    def discover_saved(self, output_root: Path) -> None:
+        """Read completion metadata once; validate full trajectories only on selection."""
+        root = (Path(output_root) / "data_generation" / "v1").resolve()
+        if not root.is_dir():
+            return
+        for candidate in sorted(root.iterdir(), key=lambda item: item.name):
+            if not candidate.is_dir() or candidate.name in self._paths:
+                continue
+            path = candidate.resolve()
+            if path.parent != root:
+                continue
+            files = [
+                path / "manifest.csv",
+                path / "public" / "episodes.csv",
+                path / "public" / "observations.csv",
+            ]
+            if not all(item.is_file() and item.resolve().is_relative_to(path) for item in files):
+                continue
+            try:
+                with files[0].open(encoding="utf-8-sig", newline="") as stream:
+                    manifests = list(csv.DictReader(stream))
+                if len(manifests) != 1:
+                    continue
+                manifest = manifests[0]
+                if any(
+                    manifest.get(key) != value
+                    for key, value in {
+                        "kind": "data_generation",
+                        "status": "complete",
+                        "version": "v1",
+                        "contract_version": "v1",
+                    }.items()
+                ):
+                    continue
+                with files[1].open(encoding="utf-8-sig", newline="") as stream:
+                    episodes = list(csv.DictReader(stream))
+                if not episodes or any(
+                    not row.get("episode_id") or not isinstance(row.get("identity_label"), str)
+                    for row in episodes
+                ):
+                    continue
+                identities = sorted({row.get("identity_label", "").strip() for row in episodes})
+                identity = (
+                    " / ".join(filter(None, identities))
+                    or manifest.get("object_id")
+                    or "객체 미기재"
+                )
+                label = (
+                    f"{identity} · {len(episodes)}개 · seed {manifest.get('seed', '미기재')}"
+                    f" · {candidate.name}"
+                )
+            except (OSError, UnicodeError, csv.Error) as error:
+                logging.getLogger(__name__).warning("Cannot index dataset %s: %s", path, error)
+                continue
+            self._paths[candidate.name] = path
+            self._labels[candidate.name] = label
 
     @property
     def options(self) -> list[dict[str, str]]:
@@ -185,7 +245,7 @@ def generation_panel(service: GenerationService, registry: DatasetRegistry) -> h
                     html.Label(
                         [
                             html.Span(
-                                "재생할 데이터 (처음 연 데이터 + 이번 서버에서 생성한 결과)",
+                                "재생할 데이터 (저장된 완료 데이터 + 새 생성 결과)",
                                 className="dropdown-label-text",
                             ),
                             dcc.Dropdown(

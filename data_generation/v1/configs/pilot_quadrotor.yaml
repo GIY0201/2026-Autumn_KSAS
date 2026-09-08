@@ -1,8 +1,5 @@
 seed: 17
 profile_id: crazyflie_eschmann_2024
-ui:
-  label: "쿼드콥터 · Crazyflie 2.1 · 100개 생성"
-  description: "실제 Crazyflie 저속 비행 자료를 참고해 seed별 새 3D 목표를 만들고, 공개 운동모델로 부드럽게 이동·정지하는 100개 궤적을 생성해 70/15/15로 나눕니다. 원본 비행 기록을 복사하지 않으며 일반 쿼드콥터 비행 전체나 독립 실비행 검증을 주장하지 않습니다."
 mode: pilot
 episode_count: 100
 source_motion_check_status: NOT_RUN

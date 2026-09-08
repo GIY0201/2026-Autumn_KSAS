@@ -108,7 +108,7 @@ select {
   display: grid;
   grid-template-columns: minmax(15rem, 1.25fr) minmax(16rem, 1.1fr) minmax(18rem, 1.5fr) minmax(14rem, 1fr);
   gap: 1px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   background: var(--line);
@@ -118,7 +118,19 @@ select {
   min-width: 0;
   padding: 1rem;
   background: var(--surface);
+  border-radius: 0.6rem;
 }
+
+/* Keep searchable multi-select menus above adjacent controls and charts. */
+.control-episodes { position: relative; z-index: 5; }
+.episode-select .Select-menu-outer { z-index: 20; }
+.episode-select .Select-value {
+  display: inline-flex; align-items: center; max-width: calc(100% - 0.5rem);
+}
+.episode-select .Select-value-icon { flex: 0 0 auto; }
+.episode-select .Select-value-label { white-space: normal; overflow-wrap: anywhere; }
+.episode-select .VirtualizedSelectOption { white-space: normal; overflow-wrap: anywhere; }
+.subtitle { overflow-wrap: anywhere; }
 
 .section-title {
   margin: 0 0 0.85rem;
@@ -395,3 +407,14 @@ label {
     width: calc(100% - 1rem);
   }
 }
+/* Stored-state inspection: fixed numeric widths and keyboard-scrollable overflow. */
+.telemetry-panel { margin-block: 1rem; padding: 1rem; border: 1px solid #e5e3df;
+  border-radius: 12px; background: #fff; min-width: 0; }
+.telemetry-scroll { overflow-x: auto; }
+.telemetry-scroll:focus-visible { outline: 2px solid #005f73; outline-offset: 3px; }
+.telemetry-table { width: 100%; border-collapse: collapse; font-size: 0.875rem;
+  font-variant-numeric: tabular-nums; }
+.telemetry-table caption { text-align: left; padding: 0.6rem 0; font-weight: 600; }
+.telemetry-table th, .telemetry-table td { padding: 0.65rem; text-align: left;
+  border-bottom: 1px solid #e5e3df; }
+.telemetry-table td { white-space: nowrap; }

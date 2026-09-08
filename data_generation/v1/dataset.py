@@ -7,6 +7,7 @@ import hashlib
 import importlib.metadata
 import math
 import platform
+import re
 import sys
 import uuid
 from collections.abc import Iterable, Mapping
@@ -17,6 +18,8 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from contracts.v1.validation import (
+    MAX_SAMPLE_COUNT,
+    MIN_SAMPLE_COUNT,
     OUTPUT_DT_S,
     PUBLIC_EPISODE_COLUMNS,
     PUBLIC_OBSERVATION_COLUMNS,
@@ -117,8 +120,8 @@ def _validate_source_file(source_file: SourceFileRecord) -> None:
 
 def _validate_generation_request(request: GenerationRequest) -> None:
     """Validate live request metadata before construction and before publication."""
-    if request.mode not in {"diagnostic", "pilot"}:
-        raise ValueError("mode must be diagnostic or pilot")
+    if request.mode not in {"diagnostic", "pilot", "corpus"}:
+        raise ValueError("mode must be diagnostic, pilot or corpus")
     if not isinstance(request.identity_label, str) or not request.identity_label:
         raise ValueError("identity_label must be non-empty")
     if not all(
@@ -134,8 +137,7 @@ def _validate_generation_request(request: GenerationRequest) -> None:
         not isinstance(request.code_hash_at_start, str)
         or len(request.code_hash_at_start) != 64
         or any(
-            character not in "0123456789abcdefABCDEF"
-            for character in request.code_hash_at_start
+            character not in "0123456789abcdefABCDEF" for character in request.code_hash_at_start
         )
     ):
         raise ValueError("code_hash_at_start must be a 64-character hexadecimal digest")
@@ -143,13 +145,24 @@ def _validate_generation_request(request: GenerationRequest) -> None:
         _validate_source_file(source_file)
 
     is_x8 = request.object_id == X8_OBJECT_ID
-    if is_x8 and (
-        request.model_id != X8_MODEL_ID
-        or request.source_id != X8_SOURCE_ID
-        or request.input_id != X8_INPUT_ID
-    ):
-        raise ValueError("X8 requests must retain the X8 model, source, and input identifiers")
-    if not is_x8:
+    if is_x8:
+        if request.source_id != X8_SOURCE_ID or request.input_id != X8_INPUT_ID:
+            raise ValueError("X8 requests must retain the X8 source and input identifiers")
+        if request.model_id != X8_MODEL_ID:
+            profile = request.model_config.get("profile")
+            if (
+                not request.source_files
+                or not isinstance(profile, Mapping)
+                or profile.get("engine") != "point_mass"
+                or profile.get("object_id") != X8_OBJECT_ID
+                or profile.get("model_id") != request.model_id
+                or profile.get("source_id") != request.source_id
+                or profile.get("input_id") != request.input_id
+            ):
+                raise ValueError(
+                    "non-legacy X8 requests require an explicit point-mass profile and provenance"
+                )
+    else:
         if (
             request.model_id == X8_MODEL_ID
             or request.source_id == X8_SOURCE_ID
@@ -252,10 +265,19 @@ def _validate_common_motion_fields(
         rtol=0.0,
         atol=1e-12,
     ):
+        raise ValueError(f"{label} t_s must match the declared {OUTPUT_DT_S:g}-second step")
+    if (
+        isinstance(episode, MotionEpisode)
+        and not MIN_SAMPLE_COUNT <= sample_count <= MAX_SAMPLE_COUNT
+    ):
         raise ValueError(
-            f"{label} t_s must match the declared {OUTPUT_DT_S:g}-second step"
+            f"generic episodes must contain {MIN_SAMPLE_COUNT}..{MAX_SAMPLE_COUNT} samples"
         )
-    if episode.status == "complete" and sample_count != SAMPLE_COUNT:
+    if (
+        isinstance(episode, GeneratedEpisode)
+        and episode.status == "complete"
+        and sample_count != SAMPLE_COUNT
+    ):
         raise ValueError(f"complete {label} episodes must contain 301 samples")
     return sample_count, time_s
 
@@ -481,12 +503,15 @@ def _record_is_complete(episode: MotionRecord) -> bool:
 
 
 def _truth_rows(episode: MotionRecord) -> list[dict[str, str]]:
-    acceleration = np.gradient(episode.velocity_enu_mps, OUTPUT_DT_S, axis=0, edge_order=2)
-    assert acceleration.shape == (SAMPLE_COUNT, 3)
+    count = len(episode.steps)
+    acceleration = np.gradient(
+        episode.velocity_enu_mps, OUTPUT_DT_S, axis=0, edge_order=min(2, count - 1)
+    )
+    assert acceleration.shape == (count, 3)
     if not np.all(np.isfinite(acceleration)):
         raise ValueError("derived truth acceleration is not finite")
     rows: list[dict[str, str]] = []
-    for step in range(SAMPLE_COUNT):
+    for step in range(count):
         position = episode.position_enu_m[step]
         velocity = episode.velocity_enu_mps[step]
         accel = acceleration[step]
@@ -516,7 +541,7 @@ def _observation_rows(
     for variant_id in VARIANT_SIGMAS:
         sigma = VARIANT_SIGMAS[variant_id]
         values = variants[variant_id]
-        for step in range(SAMPLE_COUNT):
+        for step in range(len(episode.steps)):
             position = values[step]
             rows.append(
                 {
@@ -618,6 +643,7 @@ def _write_request_snapshots(
     request: GenerationRequest,
     model_config: dict[str, object],
     record_kind: str,
+    episodes: list[MotionRecord],
 ) -> None:
     """Persist resolved request/model provenance before publishing any public records."""
     effective_config = OmegaConf.create(
@@ -634,7 +660,14 @@ def _write_request_snapshots(
             "model_config": model_config,
             "generator_version": GENERATOR_VERSION,
             "contract_version": CONTRACT_VERSION,
-            "sample_count": SAMPLE_COUNT,
+            "sample_count": (
+                len(episodes[0].steps)
+                if len({len(episode.steps) for episode in episodes}) == 1
+                else None
+            ),
+            "episode_sample_counts": {
+                episode.episode_id: len(episode.steps) for episode in episodes
+            },
             "output_dt_s": OUTPUT_DT_S,
             "record_kind": record_kind,
         }
@@ -660,15 +693,24 @@ def write_dataset(
     request: GenerationRequest,
     output_root: Path,
     source_motion_check_report: MotionCheckReport | None = None,
+    training_config: Mapping[str, object] | None = None,
 ) -> DatasetWriteResult:
     """Write a new ID-addressed output folder; never replace an existing result."""
     _validate_generation_request(request)
     ordered_episodes, record_kind, generic_diagnostic_names = _prepare_records(episodes)
     model_config = _resolved_model_config(request.model_config)
-    if record_kind == "x8_generated_episode" and request.object_id != X8_OBJECT_ID:
-        raise ValueError("GeneratedEpisode records require the X8 object request")
-    if record_kind == "motion_episode" and request.object_id == X8_OBJECT_ID:
-        raise ValueError("MotionEpisode records require explicit non-X8 provenance")
+    if training_config is not None:
+        from .training_data import validate_training_config
+
+        validate_training_config(dict(training_config))
+    if record_kind == "x8_generated_episode" and (
+        request.object_id != X8_OBJECT_ID or request.model_id != X8_MODEL_ID
+    ):
+        raise ValueError("GeneratedEpisode records require the legacy X8 model request")
+    if record_kind == "motion_episode" and (
+        request.object_id == X8_OBJECT_ID and request.model_id == X8_MODEL_ID
+    ):
+        raise ValueError("MotionEpisode records require an explicit non-legacy X8 model")
     if record_kind == "motion_episode" and source_motion_check_report is not None:
         raise ValueError("generic motion records cannot include the X8 source motion check")
     if request.code_hash_at_start is not None and _code_hash() != request.code_hash_at_start:
@@ -676,7 +718,13 @@ def write_dataset(
             "generator code hash changed after simulation started; refusing publication"
         )
 
-    dataset_id = str(uuid.uuid4())
+    # Keep a unique suffix while making folders identifiable without opening CSVs.
+    label = re.sub(r"[^\w-]+", "_", request.identity_label, flags=re.UNICODE).strip("_")
+    label = label[:32] or "dataset"
+    dataset_id = (
+        f"{label}_{request.mode}_{len(ordered_episodes)}episodes_"
+        f"seed{request.master_seed}_{uuid.uuid4().hex[:12]}"
+    )
     dataset_path = output_root / "data_generation" / GENERATOR_VERSION / dataset_id
     if dataset_path.exists():
         raise FileExistsError(f"refusing to overwrite existing dataset output: {dataset_path}")
@@ -689,6 +737,7 @@ def write_dataset(
         request=request,
         model_config=model_config,
         record_kind=record_kind,
+        episodes=ordered_episodes,
     )
     (dataset_path / "environment.txt").write_text(
         _environment_text(), encoding="utf-8", newline="\n"
@@ -704,36 +753,43 @@ def write_dataset(
             {
                 "episode_id": episode.episode_id,
                 "split": splits[episode.episode_id],
-                "duration_s": "60",
-                "sample_count": "301",
+                "duration_s": _format_float(episode.t_s[-1]),
+                "sample_count": str(len(episode.steps)),
                 "dt_s": f"{OUTPUT_DT_S:g}",
                 "identity_label": request.identity_label,
             }
             for episode in ordered_episodes
         ]
-        observations: list[dict[str, str]] = []
-        truth: list[dict[str, str]] = []
-        commands: list[dict[str, str]] = []
-        diagnostics: list[dict[str, str]] = []
-        for episode_index, episode in enumerate(ordered_episodes):
-            variants = make_observation_variants(
-                episode.position_enu_m,
-                master_seed=request.master_seed,
-                episode_index=episode_index,
-            )
-            observations.extend(_observation_rows(episode, variants))
-            truth.extend(_truth_rows(episode))
-            commands.extend(_command_rows(episode))
-            if isinstance(episode, GeneratedEpisode):
-                diagnostics.extend(_diagnostic_rows(episode))
-            else:
-                assert generic_diagnostic_names is not None
-                diagnostics.extend(_motion_diagnostic_rows(episode, generic_diagnostic_names))
+
+        def observation_rows():
+            for episode_index, episode in enumerate(ordered_episodes):
+                variants = make_observation_variants(
+                    episode.position_enu_m,
+                    master_seed=request.master_seed,
+                    episode_index=episode_index,
+                )
+                yield from _observation_rows(episode, variants)
+
+        def diagnostic_rows():
+            for episode in ordered_episodes:
+                if isinstance(episode, GeneratedEpisode):
+                    yield from _diagnostic_rows(episode)
+                else:
+                    assert generic_diagnostic_names is not None
+                    yield from _motion_diagnostic_rows(episode, generic_diagnostic_names)
+
+        commands = [row for episode in ordered_episodes for row in _command_rows(episode)]
         _write_csv(dataset_path / "public" / "episodes.csv", PUBLIC_EPISODE_COLUMNS, episodes_rows)
         _write_csv(
-            dataset_path / "public" / "observations.csv", PUBLIC_OBSERVATION_COLUMNS, observations
+            dataset_path / "public" / "observations.csv",
+            PUBLIC_OBSERVATION_COLUMNS,
+            observation_rows(),
         )
-        _write_csv(dataset_path / "evaluation" / "truth.csv", TRUTH_COLUMNS, truth)
+        _write_csv(
+            dataset_path / "evaluation" / "truth.csv",
+            TRUTH_COLUMNS,
+            (row for episode in ordered_episodes for row in _truth_rows(episode)),
+        )
         _write_csv(
             dataset_path / "evaluation" / "commands.csv",
             _EVENT_COLUMNS,
@@ -751,8 +807,18 @@ def write_dataset(
         _write_csv(
             dataset_path / "evaluation" / "diagnostics.csv",
             diagnostic_columns,
-            diagnostics,
+            diagnostic_rows(),
         )
+        if training_config is not None:
+            from .training_data import episode_metadata, write_sequence_index
+
+            write_sequence_index(
+                dataset_path,
+                episode_metadata(episodes_rows),
+                dict(training_config),
+                seed=request.master_seed,
+                object_type=request.object_id,
+            )
         if source_motion_check_report is not None:
             _write_csv(
                 dataset_path / "evaluation" / "source_motion_check.csv",

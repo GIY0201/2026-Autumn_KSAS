@@ -7,7 +7,15 @@ import math
 from pathlib import Path
 
 from .types import PublicDataset, TruthPoint
-from .validation import TRUTH_COLUMNS, ContractError, load_validated_public_records
+from .validation import (
+    PUBLIC_EPISODE_COLUMNS,
+    TRUTH_COLUMNS,
+    ContractError,
+    _is_close,
+    _parse_episodes,
+    _read_exact_csv,
+    load_validated_public_records,
+)
 
 
 def _finite_float(value: str, field: str) -> float:
@@ -42,6 +50,10 @@ def read_evaluation_truth(path: Path) -> tuple[TruthPoint, ...]:
         raise ContractError("truth must be read from an explicit evaluation/truth.csv path")
     if not path.is_file():
         raise ContractError(f"truth file is missing: {path}")
+    metadata = _parse_episodes(
+        _read_exact_csv(path.parent.parent / "public" / "episodes.csv", PUBLIC_EPISODE_COLUMNS)
+    )
+    episodes = {episode.episode_id: episode for episode in metadata}
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         if tuple(reader.fieldnames or ()) != TRUTH_COLUMNS:
@@ -69,4 +81,21 @@ def read_evaluation_truth(path: Path) -> tuple[TruthPoint, ...]:
         )
     if not points:
         raise ContractError("truth.csv must contain at least one row")
+    counts = dict.fromkeys(episodes, 0)
+    previous_key = None
+    for point in points:
+        if point.episode_id not in episodes:
+            raise ContractError("truth references unknown episode_id")
+        episode = episodes[point.episode_id]
+        key = (point.episode_id, point.step)
+        if previous_key is not None and key <= previous_key:
+            raise ContractError("truth must be sorted by episode_id and step")
+        previous_key = key
+        if point.step != counts[point.episode_id] or not _is_close(
+            point.t_s, point.step * episode.dt_s
+        ):
+            raise ContractError("truth steps and times must match episode metadata")
+        counts[point.episode_id] += 1
+    if any(counts[e.episode_id] != e.sample_count for e in metadata):
+        raise ContractError("truth row counts must match episode metadata")
     return tuple(points)

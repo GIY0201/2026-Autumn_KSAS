@@ -7,7 +7,8 @@
 ## 고정 의미
 
 - Local ENU: `x=East`, `y=North`, `z=Up`; 위치 단위 m, 시간 단위 s.
-- 60초, 5 Hz, step `0..300`, 301 samples; `t_s = step × 0.2`.
+- 5 Hz, `t_s = step × 0.2`. Episode별 2..3001 samples, 최대 600초이며 `duration_s = (sample_count - 1) × 0.2`가 일치해야 합니다. 기존 60초·301 samples도 유지합니다.
+- 각 Episode의 모든 observation variant와 evaluation truth는 해당 `public/episodes.csv`의 sample_count만큼 정확히 있어야 합니다. 서로 다른 길이의 Episode를 같은 dataset에 저장할 수 있습니다.
 - public 위치 관측은 `sigma_1m`, `sigma_3m`, `sigma_5m` 세 variant를 모두 보유합니다.
 - GPS/위경도·지도 좌표계는 contract에 포함하지 않습니다.
 
@@ -27,7 +28,7 @@ episode_id,variant_id,step,t_s,x_m,y_m,z_m,
 sigma_x_m,sigma_y_m,sigma_z_m,valid
 ```
 
-evaluation truth는 자동 탐색하지 않으며 호출자가 명시한 `evaluation/truth.csv`에서만 읽습니다. truth 열은 위치·속도·가속도를 포함하지만 `PublicDataset` type에는 truth·command field가 없습니다.
+evaluation truth는 호출자가 명시한 `evaluation/truth.csv`에서만 읽으며, 같은 dataset의 `public/episodes.csv`에 대해 ID·count·step·time을 검증합니다. truth 열은 위치·속도·가속도를 포함하지만 `PublicDataset` type에는 truth·command field가 없습니다.
 
 ## 사용
 
@@ -43,4 +44,4 @@ truth = read_evaluation_truth(dataset_path / "evaluation" / "truth.csv")
 
 미지원 variant, row 누락/중복, 비유한값, 잘못된 sigma/time, public의 extra file은 `ContractError`로 명확히 거부합니다. 다른 버전의 internal module을 직접 import하지 말고 버전이 명시된 이 reader를 사용합니다.
 
-`tests/test_contracts.py`의 4개 contract test를 포함해 최신 전체 suite는 35 passed입니다.
+가변 길이 변경의 focused 검증 기록은 [Task 1 기록](../../plan/scenario_variable_length_report.md)을 참조합니다. 과거 전체 suite 수치는 이 변경의 전체 통합 검증으로 해석하지 않습니다.

@@ -1,7 +1,4 @@
 seed: 17
-ui:
-  label: "X8 고정익 UAV · 1개 미리보기"
-  description: "X8 궤적 1개를 생성해 움직임을 살펴봅니다. 100개 생성과 같은 기체 모델이며 생성량만 다릅니다."
 mode: diagnostic
 episode_count: 1
 identity_label: X8 고정익 UAV

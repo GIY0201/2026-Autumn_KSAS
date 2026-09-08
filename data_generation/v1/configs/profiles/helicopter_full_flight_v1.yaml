@@ -1,0 +1,21 @@
+engine: full_flight
+object_id: helicopter
+model_id: helicopter_full_flight_v1
+identity_label: "헬기 · 전체 이착륙 질점 시나리오"
+source_id: gazebo_reference_2026
+input_id: design:full-flight-v1:helicopter
+evidence_status: EXPERIMENTAL_KINEMATIC_SCENARIO
+metadata:
+  motion_abstraction: point_mass_velocity_integration
+  source_role: reference_context_not_fitted_or_executed_gazebo_dynamics
+  parameter_role: experimental_generation_settings_not_aircraft_limits
+default_scenario_id: H01-B
+source_files:
+  - path: data_sources/gazebo_reference_2026/helicopter.sdf
+    sha256: d46e068a8c9245e5cd14f5540a6b349bc96ab2094f455e51f1073f59eb3872d6
+    url: https://github.com/srmainwaring/SITL_Models/blob/58b9e688555fe2e6fe43571269a49ddb851f82f5/Gazebo/models/helicopter/model.sdf
+limitations:
+  - Numeric settings are experimental, not a source-derived operating envelope.
+  - No Gazebo runtime, force-model fit, attitude, actuator, sensor or ground-contact dynamics.
+  - Infeasible scenarios are rejected; catalogs are not a claim that every combination fits 600 seconds.
+

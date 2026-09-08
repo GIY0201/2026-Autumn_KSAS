@@ -1,8 +1,22 @@
 # 2026 KSAS
 
+> 현재 데이터 생성 방식은 [데이터 생성 안내](plan/data_generation_current.md)를 먼저 확인하세요. 관측오차 3종·식별 패턴 3종·train/valid/test 저장과 아직 남은 모델 학습 작업을 구분했습니다. 아래의 60초·이전 모델·실행 결과 서술은 해당 단계의 기록입니다.
+
 동적 공중 객체의 미래 점유 영역 예측 연구를 위한 독립 작업 공간입니다.
 
-현재 **v1에서 X8·쿼드콥터·VTOL·일반 헬기의 데이터 생성·관측 합성·XY/XZ/YZ/3D 재생을 실행 검증했습니다.** VTOL·헬기는 공개 자료를 참고한 운동 수준 시뮬레이션이며, 쿼드콥터는 공개 식별 모델을 재현한 저속 진단 운동입니다. 모두 독립 실비행 검증 완료를 뜻하지 않습니다. 예측 모델 학습·추론·점유영역 계산은 아직 이 작업 범위에 포함하지 않았습니다.
+## 전체 이착륙 시나리오 — 2026-09-08 추가
+
+기존 60초 경로와 별도로 `full_flight_fixed_wing`, `full_flight_helicopter`, `full_flight_vtol` 생성 설정을 추가했습니다. 최대 600초·5 Hz의 질점 궤적이며 F64/H96/V64 조합을 명시적으로 선택할 수 있습니다. 아래의 기존 60초 설명은 legacy 경로에 해당합니다. 수치 설정은 생성용 가정이며 Gazebo 동역학을 실행하거나 실기체 운용 한계를 검증한 모델은 아닙니다.
+
+```powershell
+.\.venv\Scripts\python.exe -m data_generation.v1 --config-name full_flight_fixed_wing scenario_id=F05-D seed=17
+.\.venv\Scripts\python.exe -m data_generation.v1 --config-name full_flight_helicopter scenario_id=H10-F seed=17
+.\.venv\Scripts\python.exe -m data_generation.v1 --config-name full_flight_vtol scenario_id=V05-D seed=17
+```
+
+UI의 `전체 이착륙 · 1개 미리보기`는 각 객체의 기본 조합을 실행합니다. 다른 조합은 위 CLI의 `scenario_id`로 선택합니다. 현재 실행 중인 viewer에는 재시작 후 새 코드가 적용됩니다. [실행 기록 및 제약](plan/scenario_generator_integration.md)을 참고하세요.
+
+현재 연구용 v1 생성 선택지는 **고정익·쿼드콥터의 제약 질점 모델**과 기존 **VTOL·일반 헬기의 bounded-motion 모델**입니다. 기존 X8·Crazyflie 6-DOF CLI와 결과는 비교·재현 경로로 보존하지만, 일반 Browser 생성 목록에는 노출하지 않습니다. 제약 질점 경로는 Local ENU 60초 운동학 생성기이며, 독립 실비행 검증이나 6-DOF 식별 완료를 뜻하지 않습니다. 예측 모델 학습·추론·점유영역 계산은 아직 이 작업 범위에 포함하지 않았습니다.
 
 사용자 지시에 따라 **VTOL·쿼드콥터·일반 헬기도 별도 v2가 아니라 기존 v1에 통합했습니다.** VTOL·헬기는 내부 장치 대신 속도·가속·선회·상승/하강의 연속 운동을 모델링합니다. 공개 자료의 참고 정보와 생성용 시뮬레이션 설정은 구별하며, 공통 저장·관측·8088 UI를 재사용합니다. 최신 범위와 검증 결과는 [간소화 운동모델 통합 기록](plan/reduced_motion_v1_implementation.md), 이전 쿼드콥터 검증은 [기존 v1 통합 기록](plan/multi_object_v1_implementation.md)을 확인하세요.
 
@@ -10,7 +24,7 @@
 
 | 영역 | 현재 상태 | 책임 |
 |---|---|---|
-| `data_generation/v1/` | 네 객체 생성·통합 실행 검증 완료 | 기존 X8·쿼드콥터 6-DOF와 새 bounded-motion, 60초 Episode, 관측오차 합성, 출처·설정 추적, background 생성 service; source motion check는 X8 전용 |
+| `data_generation/v1/` | 4개 연구용 생성 경로 | 고정익·쿼드콥터 제약 질점, VTOL·헬기 bounded-motion, 60초 Episode, 관측오차 합성, 출처·설정 추적, background 생성 service; X8 source motion check는 legacy CLI 전용 |
 | `contracts/v1/` | 구현·검증 완료 | public/evaluation CSV 경계, strict schema validation, reader |
 | `visualization/v1/` | 구현·Browser 검증 완료 | 생성 설정·seed·진행·중단·결과 선택, Dash/Plotly XY/XZ/YZ/3D 재생·Pause·PNG 네 장 export |
 | `models/gru/v1/` | 미구현 | 별도 모델 설계와 구현 범위 |
@@ -28,8 +42,11 @@ $env:UV_CACHE_DIR = "$PWD\temp\uv-cache"
 $env:UV_PYTHON_INSTALL_DIR = "$PWD\temp\uv-python"
 uv sync --locked
 
-# 외부 원본 없이 X8 진단용 합성 dataset 1개 생성
-uv run python -m data_generation.v1 --config-name diagnostic
+# 고정익 제약 질점 진단 dataset 1개 생성
+uv run python -m data_generation.v1 --config-name diagnostic_fixed_wing_point_mass
+
+# 쿼드콥터 제약 질점 진단 dataset 1개 생성
+# uv run python -m data_generation.v1 --config-name diagnostic_quadrotor_point_mass
 
 # X8 원본 자료를 별도로 준비한 경우에만 source motion check 실행
 # uv run python -m data_generation.v1 --config-name diagnostic_with_motion_check
@@ -41,7 +58,7 @@ uv run python -m visualization.v1 `
 
 viewer는 기본적으로 `http://127.0.0.1:8088`에서만 열립니다. port는 `8088`로 고정하며 다른 port를 자동 선택하지 않습니다. `--public-only`를 추가하면 evaluation truth와 diagnostic을 읽지 않습니다. `latest`를 추론하거나 자동 선택하지 않으므로 항상 `<dataset_id>`를 명시합니다.
 
-실행한 viewer 상단에서 **생성 설정 선택 → seed 입력 → 데이터 생성 → 생성 결과 열기**를 할 수 있습니다. X8, `쿼드콥터 · Crazyflie 2.1`, `VTOL · 간소화 운동모델`, `헬기 · 간소화 운동모델` 중 선택합니다. 각 객체의 일반 설정은 `1개 미리보기`와 `100개 생성`이며 기존 궤적을 재생하면서 별도 process에서 생성합니다. X8의 추가 `[개발자 점검]`은 원본 운동 비교 보고서용이지 다른 기체가 아닙니다. 지원 상태는 실제 profile/preset에서 읽습니다. 자세한 구분과 쿼드콥터 움직임의 한계는 [점검 기록](plan/quadrotor_motion_preset_audit.md), 사용 방법과 서버 종료 시 처리는 [생성 README](data_generation/v1/README.md), [viewer README](visualization/v1/README.md)를 참조합니다.
+실행한 viewer 상단에서 **생성 설정 선택 → seed 입력 → 데이터 생성 → 생성 결과 열기**를 할 수 있습니다. 일반 목록은 `고정익 UAV · 제약 질점 모델`, `쿼드콥터 · 제약 질점 모델`, `VTOL · 간소화 운동모델`, `헬기 · 간소화 운동모델`의 `1개 미리보기`와 `100개 생성`을 실제 YAML metadata에서 읽습니다. 기존 X8·Crazyflie 6-DOF config는 CLI 비교·재현용으로 남아 있지만 일반 목록에는 없습니다. 자세한 제약과 실행 증거는 [Stage 1 검증 기록](plan/point_mass_stage1_verification.md), [생성 README](data_generation/v1/README.md), [viewer README](visualization/v1/README.md)를 참조합니다.
 
 ## 생성 결과와 추적
 
@@ -82,6 +99,10 @@ outputs/visualization/v1/090b520c-ecfd-4124-85ee-14d3d8ed82d5/
 - [VTOL·쿼드콥터·헬기 v1 통합 범위](plan/multi_object_generation_scope.md)
 - [세 객체 v1 구현·검증 기록](plan/multi_object_v1_implementation.md)
 - [VTOL·헬기 간소화 운동모델 통합](plan/reduced_motion_v1_implementation.md)
+- [제약 질점 Stage 1 전환 명세](plan/point_mass_migration_design.md)
+- [제약 질점 Stage 1 실행·검증 기록](plan/point_mass_stage1_verification.md)
+- [독립 X8 참조 운동 수치 추출](plan/x8_characterization.md) — `REFERENCE_SIMULATION` 후속 작업이며, 질점 profile을 자동 변경하지 않습니다.
+- [Gazebo 계수 기반 최소 운동 제약](plan/gazebo_minimum_constraints.md) — 원본 계수와 조건부 계산값을 기존 테스트 설정에서 분리한 1차 기록이며, 생성용 상한은 아직 미적용입니다.
 - [객체별 공개 근거와 미확정 항목](plan/multi_object_source_audit.md)
 - [기능별·버전별 파일 배치](plan/project_structure.md)
 - [모델 설계 인계](plan/model_design_handoff.md)
@@ -110,3 +131,11 @@ uv sync --locked
 원본이 필요 없는 X8 `diagnostic` 생성과 달리, X8 source motion check 및 쿼드콥터·VTOL·헬기 profile은 별도 원본이 필요합니다. 각 `data_sources/<source_id>/README.md` 또는 `SOURCE.md`와 `data_generation/v1/configs/profiles/`, `configs/motion_reference/`에 기록된 출처·고정 버전·경로·hash를 따라 자료를 준비해야 합니다. 자료별 원래 이용 조건을 따르며 프로젝트 MIT LICENSE를 외부 자료에 적용하지 않습니다. 원본 부재나 hash 불일치 검사를 우회하지 않습니다.
 
 전체 테스트에도 원본이 필요한 항목이 있습니다. 이 컴퓨터에 원본이 있는 상태의 테스트 통과를, 원본 없는 새 clone에서의 전체 테스트 통과로 해석하지 않습니다.
+## 전체 시나리오 + 학습 데이터 / 속도 검토
+
+8088 UI의 `객체 · 생성 설정`에서 `고정익 / 헬기 / VTOL · 모든 시나리오 + 학습데이터`를
+선택하면 catalog 전체를 생성하고 같은 dataset에 공개 관측 시퀀스 목록을 저장한다.
+재생 화면에는 현재 위치·속력·축별 속도·가속도 표가 추가되어 있다.
+상세 실행법과 입력 경계는 [생성 README](data_generation/v1/README.md),
+[시각화 README](visualization/v1/README.md), [작업 기록](plan/telemetry_training_generation.md)을 따른다.
+이 기능은 학습 데이터 준비이며 예측 모델을 학습시키는 기능이 아니다.

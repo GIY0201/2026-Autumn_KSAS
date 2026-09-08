@@ -51,6 +51,9 @@ VARIANT_SIGMAS = {"sigma_1m": 1.0, "sigma_3m": 3.0, "sigma_5m": 5.0}
 DURATION_S = 60.0
 OUTPUT_DT_S = 0.2
 SAMPLE_COUNT = 301
+MAX_DURATION_S = 600.0
+MIN_SAMPLE_COUNT = 2
+MAX_SAMPLE_COUNT = int(MAX_DURATION_S / OUTPUT_DT_S) + 1
 ALLOWED_SPLITS = frozenset({"train", "validation", "test", "diagnostic"})
 
 assert SAMPLE_COUNT == int(DURATION_S / OUTPUT_DT_S) + 1
@@ -114,11 +117,11 @@ def _parse_episodes(rows: Iterable[dict[str, str]]) -> tuple[EpisodeMetadata, ..
         sample_count = _int(row["sample_count"], "sample_count")
         dt_s = _float(row["dt_s"], "dt_s")
         if (
-            not _is_close(duration_s, DURATION_S)
-            or sample_count != SAMPLE_COUNT
+            not MIN_SAMPLE_COUNT <= sample_count <= MAX_SAMPLE_COUNT
+            or not _is_close(duration_s, (sample_count - 1) * OUTPUT_DT_S)
             or not _is_close(dt_s, OUTPUT_DT_S)
         ):
-            raise ContractError("episode metadata does not match 60 s / 5 Hz / 301 sample v1")
+            raise ContractError("episode metadata must agree on sample_count, duration and 5 Hz")
         identity_label = row["identity_label"]
         if not identity_label:
             raise ContractError("identity_label must be non-empty")
@@ -139,7 +142,7 @@ def _parse_episodes(rows: Iterable[dict[str, str]]) -> tuple[EpisodeMetadata, ..
 
 
 def _parse_observations(
-    rows: Iterable[dict[str, str]], episode_ids: set[str]
+    rows: Iterable[dict[str, str]], episodes: dict[str, EpisodeMetadata]
 ) -> tuple[Observation, ...]:
     observations: list[Observation] = []
     grouped: dict[tuple[str, str], list[Observation]] = defaultdict(list)
@@ -147,7 +150,7 @@ def _parse_observations(
     for row in rows:
         episode_id = row["episode_id"]
         variant_id = row["variant_id"]
-        if episode_id not in episode_ids:
+        if episode_id not in episodes:
             raise ContractError(f"observation references unknown episode_id: {episode_id}")
         if variant_id not in VARIANT_SIGMAS:
             raise ContractError(f"unsupported variant_id: {variant_id}")
@@ -196,17 +199,18 @@ def _parse_observations(
         observations.append(observation)
         grouped[(episode_id, variant_id)].append(observation)
 
-    for episode_id in sorted(episode_ids):
+    for episode_id in sorted(episodes):
+        sample_count = episodes[episode_id].sample_count
         for variant_id in VARIANT_SIGMAS:
             sequence = grouped.get((episode_id, variant_id), [])
-            if len(sequence) != SAMPLE_COUNT:
+            if len(sequence) != sample_count:
                 message = (
-                    f"{episode_id}/{variant_id} must contain {SAMPLE_COUNT} rows, "
+                    f"{episode_id}/{variant_id} must contain {sample_count} rows, "
                     f"got {len(sequence)}"
                 )
                 raise ContractError(message)
-            if [observation.step for observation in sequence] != list(range(SAMPLE_COUNT)):
-                raise ContractError(f"{episode_id}/{variant_id} steps must be 0 through 300")
+            if [observation.step for observation in sequence] != list(range(sample_count)):
+                raise ContractError(f"{episode_id}/{variant_id} steps must match metadata")
     return tuple(observations)
 
 
@@ -226,7 +230,7 @@ def load_validated_public_records(
     episodes = _parse_episodes(_read_exact_csv(directory / "episodes.csv", PUBLIC_EPISODE_COLUMNS))
     observations = _parse_observations(
         _read_exact_csv(directory / "observations.csv", PUBLIC_OBSERVATION_COLUMNS),
-        {episode.episode_id for episode in episodes},
+        {episode.episode_id: episode for episode in episodes},
     )
     return episodes, observations
 

@@ -12,6 +12,9 @@ from data_generation.v1 import generate, service
 from data_generation.v1.dataset import GenerationRequest, write_dataset
 from data_generation.v1.tests.test_dataset import _episode
 
+_POINT_MASS_DIAGNOSTIC = "diagnostic_fixed_wing_point_mass"
+_POINT_MASS_PILOT = "pilot_fixed_wing_point_mass"
+
 
 class FakeProcess:
     """Keep process scheduling deterministic while testing real worker/file behavior."""
@@ -51,12 +54,7 @@ def _finish(manager, monkeypatch, *, failure=False):
         progress(0, int(config.episode_count), "simulating")
         if failure:
             raise RuntimeError("test integration failed")
-        progress(1, 1, "writing")
-        return write_dataset(
-            [_episode()],
-            request=GenerationRequest(int(config.seed), "diagnostic", "NOT_RUN"),
-            output_root=output_root,
-        )
+        return generate.generate_from_config(config, output_root=output_root, progress=progress)
 
     monkeypatch.setattr(service, "generate_from_config", run)
     job = manager.snapshot()
@@ -68,17 +66,23 @@ def _finish(manager, monkeypatch, *, failure=False):
 def test_presets_come_from_real_configs_with_readable_names():
     presets = service.list_presets()
     assert {preset.preset_id for preset in presets} == {
-        "diagnostic",
+        "corpus_fixed_wing",
+        "corpus_helicopter",
+        "corpus_vtol",
+        "diagnostic_fixed_wing_point_mass",
         "diagnostic_helicopter",
-        "diagnostic_quadrotor",
+        "diagnostic_quadrotor_point_mass",
         "diagnostic_vtol",
-        "diagnostic_with_motion_check",
-        "pilot",
+        "pilot_fixed_wing_point_mass",
         "pilot_helicopter",
-        "pilot_quadrotor",
+        "pilot_quadrotor_point_mass",
         "pilot_vtol",
+        "full_flight_fixed_wing",
+        "full_flight_helicopter",
+        "full_flight_vtol",
     }
     assert {preset.object_id for preset in presets} == {
+        "fixed_wing",
         "x8_fixed_wing",
         "quadrotor",
         "vtol",
@@ -87,15 +91,47 @@ def test_presets_come_from_real_configs_with_readable_names():
     for preset in presets:
         config = OmegaConf.load(service.CONFIG_ROOT / f"{preset.preset_id}.yaml")
         assert preset.label == config.ui.label
-        assert preset.episode_count == config.episode_count
+        if config.mode == "corpus":
+            assert preset.episode_count == {
+                "fixed_wing": 64, "helicopter": 96, "vtol": 64,
+            }[preset.object_id]
+        else:
+            assert preset.episode_count == config.episode_count
         assert preset.default_seed == config.seed
         assert preset.description == config.ui.description
+
+
+@pytest.mark.parametrize(
+    ("config_id", "profile_id", "mode", "episode_count", "source_check"),
+    [
+        ("diagnostic", None, "diagnostic", 1, "NOT_RUN"),
+        ("pilot", None, "pilot", 100, "NOT_RUN"),
+        ("diagnostic_with_motion_check", None, "diagnostic", 1, "REPORT_ONLY"),
+        ("diagnostic_quadrotor", "crazyflie_eschmann_2024", "diagnostic", 1, "NOT_RUN"),
+        ("pilot_quadrotor", "crazyflie_eschmann_2024", "pilot", 100, "NOT_RUN"),
+    ],
+)
+def test_legacy_cli_configs_remain_present_but_are_not_general_ui_presets(
+    config_id: str,
+    profile_id: str | None,
+    mode: str,
+    episode_count: int,
+    source_check: str,
+) -> None:
+    """Removing UI metadata must not alter a legacy X8/Crazyflie CLI configuration."""
+    config = OmegaConf.load(service.CONFIG_ROOT / f"{config_id}.yaml")
+
+    assert "ui" not in config
+    assert config.get("profile_id") == profile_id
+    assert config.mode == mode
+    assert config.episode_count == episode_count
+    assert config.source_motion_check_status == source_check
 
 
 @pytest.mark.parametrize("seed", [-1, 1.2, True, None, "17", float("nan"), 2**32])
 def test_invalid_seed_does_not_launch_a_process(jobs, seed):
     with pytest.raises(ValueError, match="seed"):
-        jobs.submit("diagnostic", seed)
+        jobs.submit(_POINT_MASS_DIAGNOSTIC, seed)
     assert jobs.snapshot() is None
     assert not jobs.work_root.exists()
 
@@ -107,7 +143,7 @@ def test_unknown_preset_and_path_traversal_are_rejected(jobs):
 
 
 def test_submit_is_nonblocking_and_rejects_duplicate_run(jobs):
-    first = jobs.submit("diagnostic", 42)
+    first = jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     assert first.state == "running"
     assert first.completed == 0 and first.total == 1
     config = OmegaConf.load(first.work_path / "request.yaml")
@@ -115,12 +151,12 @@ def test_submit_is_nonblocking_and_rejects_duplicate_run(jobs):
     assert jobs._process.kwargs["shell"] is False
     assert jobs._process.command[0] == service.sys.executable
     with pytest.raises(RuntimeError, match="already running"):
-        jobs.submit("pilot", 17)
+        jobs.submit(_POINT_MASS_PILOT, 17)
     assert jobs.snapshot().job_id == first.job_id
 
 
 def test_complete_requires_validated_output_and_keeps_seed_provenance(jobs, monkeypatch):
-    jobs.submit("diagnostic", 42)
+    jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     finished = _finish(jobs, monkeypatch)
     assert finished.state == "complete"
     assert finished.completed == finished.total == 1
@@ -133,7 +169,7 @@ def test_complete_requires_validated_output_and_keeps_seed_provenance(jobs, monk
 
 
 def test_worker_exception_is_failed_and_not_playable(jobs, monkeypatch):
-    jobs.submit("diagnostic", 42)
+    jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     failed = _finish(jobs, monkeypatch, failure=True)
     assert failed.state == "failed"
     assert "test integration failed" in failed.message
@@ -142,7 +178,7 @@ def test_worker_exception_is_failed_and_not_playable(jobs, monkeypatch):
 
 
 def test_process_exit_without_receipt_is_not_success(jobs):
-    jobs.submit("diagnostic", 42)
+    jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     jobs._process.returncode = 0
     assert jobs.snapshot().state == "failed"
     assert "receipt" in jobs.snapshot().message
@@ -150,7 +186,7 @@ def test_process_exit_without_receipt_is_not_success(jobs):
 
 @pytest.mark.parametrize("completed,phase", [(0, "complete"), (1, "writing")])
 def test_incomplete_terminal_receipt_is_rejected(jobs, completed, phase):
-    job = jobs.submit("diagnostic", 42)
+    job = jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     service._write_status(
         job.work_path,
         state="complete",
@@ -166,7 +202,7 @@ def test_incomplete_terminal_receipt_is_rejected(jobs, completed, phase):
 
 
 def test_missing_result_cannot_be_reported_complete(jobs):
-    job = jobs.submit("diagnostic", 42)
+    job = jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     service._write_status(
         job.work_path,
         state="complete",
@@ -181,7 +217,7 @@ def test_missing_result_cannot_be_reported_complete(jobs):
 
 
 def test_terminal_receipt_must_match_the_requested_seed(jobs):
-    job = jobs.submit("diagnostic", 42)
+    job = jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     other = write_dataset(
         [_episode()],
         request=GenerationRequest(18, "diagnostic", "NOT_RUN"),
@@ -204,7 +240,7 @@ def test_terminal_receipt_must_match_the_requested_seed(jobs):
 
 @pytest.mark.parametrize("field", ["object_id", "model_id", "source_id", "input_id"])
 def test_completed_dataset_must_match_requested_model_provenance(jobs, field):
-    job = jobs.submit("diagnostic", 42)
+    job = jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     other = write_dataset(
         [_episode()],
         request=GenerationRequest(42, "diagnostic", "NOT_RUN"),
@@ -236,7 +272,7 @@ def test_completed_dataset_must_match_requested_model_provenance(jobs, field):
 
 
 def test_success_receipt_is_not_complete_until_worker_exits(jobs):
-    job = jobs.submit("diagnostic", 42)
+    job = jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     service._write_status(
         job.work_path,
         state="complete",
@@ -251,7 +287,7 @@ def test_success_receipt_is_not_complete_until_worker_exits(jobs):
 
 
 def test_cancel_persists_the_terminal_state(jobs):
-    job = jobs.submit("diagnostic", 42)
+    job = jobs.submit(_POINT_MASS_DIAGNOSTIC, 42)
     jobs.cancel()
     assert service._read_status(job.work_path)["state"] == "cancelled"
 
@@ -281,10 +317,10 @@ def test_receipt_replace_retries_a_temporary_windows_reader_lock(tmp_path, monke
 
 
 def test_cancel_stops_only_the_owned_worker_and_allows_a_new_run(jobs):
-    first = jobs.submit("pilot", 17)
+    first = jobs.submit(_POINT_MASS_PILOT, 17)
     cancelled = jobs.cancel()
     assert cancelled.state == "cancelled"
-    second = jobs.submit("diagnostic", 17)
+    second = jobs.submit(_POINT_MASS_DIAGNOSTIC, 17)
     assert first.job_id != second.job_id
     assert first.work_path.is_dir()
     assert jobs.results == ()

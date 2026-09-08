@@ -1,0 +1,15 @@
+seed: 17
+profile_id: quadrotor_point_mass_v1
+ui:
+  label: "쿼드콥터 · 제약 질점 모델 · 100개 생성"
+  description: "동일한 명시 profile로 100개 60초 제약 질점 궤적을 생성하고 70/15/15로 분할합니다. 별도 실행을 요청할 때만 사용하며 Crazyflie 6-DOF 또는 실기체 검증을 뜻하지 않습니다."
+mode: pilot
+episode_count: 100
+source_motion_check_status: NOT_RUN
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
