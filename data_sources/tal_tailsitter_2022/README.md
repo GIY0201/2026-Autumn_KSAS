@@ -4,8 +4,9 @@ Acquired: 2026-09-07. Original: `2207.13218v1.pdf`, SHA-256 `3d485b0125c90d1ac9c
 
 Ezra Tal and Sertac Karaman (2022), *Global Incremental Flight Control for Agile Maneuvering of a Tailsitter Flying Wing*. [arXiv v1](https://arxiv.org/abs/2207.13218v1), [original PDF](https://arxiv.org/pdf/2207.13218v1), DOI [10.2514/1.G006645](https://doi.org/10.2514/1.G006645). arXiv non-exclusive distribution license is not a general open-source license; the local original is retained for research reference, not relicensed.
 
-The repository therefore stores a verified downloader instead of redistributing the
-PDF. From the repository root, prepare the pinned source with:
+The repository stores the pinned PDF unchanged so a clean clone can reproduce every
+generation preset. The verified downloader remains available for recovery or an
+independent checksum check:
 
 ```powershell
 uv run python data_sources/tal_tailsitter_2022/fetch_source.py

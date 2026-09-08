@@ -49,16 +49,9 @@ client_secret*.json
 *.ckpt
 *.onnx
 
-# Retain source provenance written for this project, not upstream materials.
-/data_sources/**
-!/data_sources/**/
-!/data_sources/AGENTS.md
-!/data_sources/README.md
-!/data_sources/*/README.md
-!/data_sources/*/SOURCE.md
-!/data_sources/tal_tailsitter_2022/fetch_source.py
-# This README is an unmodified upstream document, not our provenance record.
-/data_sources/bitcraze_positioning/README.md
+# Keep reproducibility sources in Git so a clean clone can run every preset.
+# The user-provided archive remains local; generated datasets stay excluded below.
+!/data_sources/**/*.npy
 
 # Keep directory guidance, but not generated datasets, exports, or scratch files.
 /outputs/*

@@ -7,3 +7,5 @@
 *.jpeg binary
 *.gif binary
 *.pdf binary
+# Source evidence is checksum-pinned and must survive clone byte-for-byte.
+data_sources/** binary
